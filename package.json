@@ -1,0 +1,51 @@
+{
+  "name": "kit_loop",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "seed": "node src/jobs/seedData.js",
+    "seed:test": "node src/jobs/testSeed.js",
+    "seed:test:reset": "node src/jobs/testSeed.js --reset",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@supabase/server": "^1.4.1",
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.10.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "google-auth-library": "^10.9.0",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "jwks-rsa": "^4.1.0",
+    "multer": "^2.2.0",
+    "node-cron": "^4.5.0",
+    "otplib": "^13.4.1",
+    "passport": "^0.7.0",
+    "passport-apple": "^2.0.2",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-local": "^1.0.0",
+    "pg": "^8.22.0",
+    "prisma": "^7.8.0",
+    "qrcode": "^1.5.4",
+    "resend": "^6.16.0",
+    "stripe": "^22.3.0",
+    "ua-parser-js": "^2.0.10",
+    "winston": "^3.19.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "nodemon": "^3.1.14"
+  }
+}

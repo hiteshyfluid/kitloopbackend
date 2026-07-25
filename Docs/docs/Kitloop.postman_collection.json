@@ -1,0 +1,247 @@
+{
+  "info": {
+    "_postman_id": "9c1816cc-914a-4d8f-ba3d-a4f081231003",
+    "name": "Kitloop",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "20703625",
+    "_collection_link": "https://go.postman.co/collection/20703625-9c1816cc-914a-4d8f-ba3d-a4f081231003?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "MoovParcel Renew Label",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "api-user",
+            "value": "Vintstreet",
+            "type": "text"
+          },
+          {
+            "key": "api-token",
+            "value": "YOUR_API_TOKEN",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "https://production.courierapi.co.uk/api/pdfs/renew?key=XXXXXXXXX\"",
+          "protocol": "https",
+          "host": [
+            "production",
+            "courierapi",
+            "co",
+            "uk"
+          ],
+          "path": [
+            "api",
+            "pdfs",
+            "renew"
+          ],
+          "query": [
+            {
+              "key": "key",
+              "value": "XXXXXXXXX\"",
+              "description": "enter the value returned for the key in the original label request"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Price",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "client_name",
+            "value": "Moov Parcel",
+            "type": "text"
+          },
+          {
+            "key": "customer_dc_id",
+            "value": "Kitloop",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "customer_key",
+            "value": "YOUR_CUSTOMER_KEY",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"auth_company\": \"\",\n    \"format_address_default\": true,\n    \"request_id\": \"efcf0fcf6c20f9e17a07030eac4d1a09\",\n    \"shipment\": {\n        \"label_size\": \"6x4\",\n        \"label_format\": \"pdf\",\n        \"generate_invoice\": false,\n        \"generate_packing_slip\": false,\n        \"collection_date\": \"2024-08-18 18:00:00\",\n        \"reference\": \"test\",\n        \"reference_2\": \"\",\n        \"delivery_instructions\": \"\",\n        \"ship_from\": {\n            \"name\": \"Ross\",\n            \"phone\": \"01111111111\",\n            \"email\": \"ross@saas-ecommerce.com\",\n            \"company_name\": \"Nino Logistics\",\n            \"address_1\": \"2 Infirmary Street\",\n            \"address_2\": \"\",\n            \"address_3\": \"\",\n            \"city\": \"Leeds\",\n            \"postcode\": \"LS1 2JP\",\n            \"county\": \"\",\n            \"country_iso\": \"GB\",\n            \"company_id\": \"00000000\",\n            \"tax_id\": \"GB123456789\",\n            \"eori_id\": \"GB123456789000\",\n            \"ioss_number\": null\n        },\n        \"ship_to\": {\n            \"name\": \"Ross Jermy\",\n            \"phone\": \"\",\n            \"email\": \"ross@saas-ecommerce.com\",\n            \"company_name\": null,\n            \"address_1\": \"9 Mellor Meadows\",\n            \"address_2\": \"Whittington\",\n            \"address_3\": \"\",\n            \"city\": \"Oswestry\",\n            \"county\": \"Shropshire\",\n            \"postcode\": \"SY11 4FN\",\n            \"country_iso\": \"GB\",\n            \"tax_id\": null\n        },\n        \"parcels\": [\n            {\n                \"dim_width\": 10,\n                \"dim_height\": 20,\n                \"dim_length\": 30,\n                \"dim_unit\": \"cm\",\n                \"items\": [\n                    {\n                        \"description\": \"Test Item\",\n                        \"origin_country\": \"GB\",\n                        \"quantity\": 1,\n                        \"value_currency\": \"GBP\",\n                        \"weight\": 3,\n                        \"weight_unit\": \"KG\",\n                        \"sku\": \"TestSKU\",\n                        \"hs_code\": \"50000000\",\n                        \"value\": \"0.00\",\n                        \"extended_description\": \"Test Item\"\n                    }\n                ]\n            }\n        ]\n    }\n}"
+        },
+        "url": {
+          "raw": "https://production.billingapi.co.uk/api/customer-routes/get-quote",
+          "protocol": "https",
+          "host": [
+            "production",
+            "billingapi",
+            "co",
+            "uk"
+          ],
+          "path": [
+            "api",
+            "customer-routes",
+            "get-quote"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Pickup Locations",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "api-user",
+            "value": "Kitloop",
+            "type": "text"
+          },
+          {
+            "key": "api-token",
+            "value": "YOUR_API_TOKEN",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n\t\"testing\": false,\n    \"auth_company\" : \"Kitloop\",\n    \"courier\": {\n            \"courier\": \"YodelC2C\",\n            \"auth_company\": \"C2C\"\n            \n        },\n    \"address\" : {\n        \"name\": \"Ross Jermy\",\n        \"phone\": \"07498991612\",\n        \"email\": \"ross.jermy@moovparcel.co.uk\",\n        \"company_name\": \"Ross Jermy\",\n        \"address_1\": \"1 Mellor Meadows\",\n        \"address_2\": \"\",\n        \"address_3\": \"\",\n        \"city\": \"Whittington\",\n        \"county\": \"\",\n        \"postcode\": \"SY11 4FN\",\n        \"country_iso\": \"GB\"\n    }\n}"
+        },
+        "url": {
+          "raw": "https://production.courierapi.co.uk/api/couriers/v1/MoovParcel/get-pickup-locations",
+          "protocol": "https",
+          "host": [
+            "production",
+            "courierapi",
+            "co",
+            "uk"
+          ],
+          "path": [
+            "api",
+            "couriers",
+            "v1",
+            "MoovParcel",
+            "get-pickup-locations"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Label",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "api-user",
+            "value": "Kitloop",
+            "type": "text"
+          },
+          {
+            "key": "api-token",
+            "value": "YOUR_API_TOKEN",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"auth_company\": \"Kitloop\",\r\n    \"format_address_default\": true,\r\n    \"request_id\": \"efcf0fcf6c20f9e17a07030eac4d1a09\",\r\n    \"shipment\": {\r\n        \"label_size\": \"6x4\",\r\n        \"label_format\": \"pdf\",\r\n        \"generate_invoice\": false,\r\n        \"generate_packing_slip\": false,\r\n        \"courier\": {\r\n            \"auth_company\": \"C2C\"\r\n        },\r\n        \"collection_date\": \"2026-06-27 18:00:00\",\r\n        \"dc_service_id\":\"YOD-C2CPS\",\r\n        \"reference\": \"test\",\r\n        \"reference_2\": \"\",\r\n        \"delivery_instructions\": \"\",\r\n        \"ship_from\": {\r\n            \"name\": \"Ross\",\r\n            \"phone\": \"07498991612\",\r\n            \"email\": \"\",\r\n            \"company_name\": \"\",\r\n            \"address_1\": \"9 Mellor Meadows\",\r\n            \"address_2\": \"\",\r\n            \"address_3\": \"\",\r\n            \"city\": \"Whittington\",\r\n            \"postcode\": \"SY11 4FN\",\r\n            \"county\": \"\",\r\n            \"country_iso\": \"GB\",\r\n            \"company_id\": \"00000000\",\r\n            \"tax_id\": \"GB123456789\",\r\n            \"ioss_number\": null\r\n        },\r\n        \"ship_to\": {\r\n            \"name\": \"Ross Jermy\",\r\n            \"phone\": \"07498991612\",\r\n            \"email\": \"ross@saas-ecommerce.com\",\r\n            \"company_name\": null,\r\n            \"address_1\": \"9 Mellor Meadows\",\r\n            \"address_2\": \"\",\r\n            \"address_3\": \"\",\r\n            \"city\": \"Whittington\",\r\n            \"county\": \"Shropshire\",\r\n            \"postcode\": \"SY11 4FN\",\r\n            \"country_iso\": \"GB\",\r\n            \"tax_id\": null\r\n        },\r\n        \"parcels\": [\r\n            {\r\n                \"dim_width\": 10,\r\n                \"dim_height\": 20,\r\n                \"dim_length\": 30,\r\n                \"dim_unit\": \"cm\",\r\n                \"items\": [\r\n                    {\r\n                        \"description\": \"Test Item\",\r\n                        \"origin_country\": \"GB\",\r\n                        \"quantity\": 1,\r\n                        \"value_currency\": \"GBP\",\r\n                        \"weight\": 2,\r\n                        \"weight_unit\": \"KG\",\r\n                        \"sku\": \"TestSKU\",\r\n                        \"hs_code\": \"50000000\",\r\n                        \"value\": \"0.00\",\r\n                        \"extended_description\": \"Test Item)\"\r\n                    }\r\n                ]\r\n            }\r\n        ]\r\n    }\r\n}"
+        },
+        "url": {
+          "raw": "https://production.courierapi.co.uk/api/couriers/v1/MoovParcel/create-label",
+          "protocol": "https",
+          "host": [
+            "production",
+            "courierapi",
+            "co",
+            "uk"
+          ],
+          "path": [
+            "api",
+            "couriers",
+            "v1",
+            "MoovParcel",
+            "create-label"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "MoovParcel Cancel Label",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "api-user",
+            "value": "Kitloop",
+            "type": "text"
+          },
+          {
+            "key": "api-token",
+            "value": "YOUR_API_TOKEN",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n\t\"testing\":\t\t\tfalse,\r\n\t\"auth_company\":\t\t\"Kitloop\",\r\n\t\"reference\" :       \"test\",\r\n    \"cancel_label\" :    true\r\n}"
+        },
+        "url": {
+          "raw": "https://production.courierapi.co.uk/api/couriers/v1/MoovParcel/mark-shipment-cancelled",
+          "protocol": "https",
+          "host": [
+            "production",
+            "courierapi",
+            "co",
+            "uk"
+          ],
+          "path": [
+            "api",
+            "couriers",
+            "v1",
+            "MoovParcel",
+            "mark-shipment-cancelled"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

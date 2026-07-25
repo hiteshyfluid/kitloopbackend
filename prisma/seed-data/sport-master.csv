@@ -1,0 +1,88 @@
+sport,sub_category,parcel_size
+Cricket,Cricket bat,large
+Cricket,Batting pads,medium
+Cricket,Cricket bag,medium
+Cricket,Cricket gloves,small
+Cricket,Cricket helmet,small
+Cricket,Cricket ball,small
+Football,Football boots,small
+Football,Football,small
+Football,Shin pads,small
+Football,Goalkeeper gloves,small
+Football,Football shirt,small
+Golf,Golf irons set,large
+Golf,Golf wedge,large
+Golf,Golf putter,large
+Golf,Golf driver,oversized
+Golf,Golf bag,oversized
+Golf,Golf shoes,small
+Golf,Golf balls,small
+Golf,Golf glove,small
+Tennis,Tennis racket,medium
+Tennis,Tennis bag,medium
+Tennis,Tennis shoes,small
+Tennis,Tennis balls,small
+Tennis,Tennis string,small
+Padel,Padel racket,medium
+Padel,Padel bag,medium
+Padel,Padel shoes,small
+Padel,Padel balls,small
+Squash,Squash racket,medium
+Squash,Squash shoes,small
+Squash,Squash balls,small
+Squash,Squash eyewear,small
+Running,Running shoes,small
+Running,Running watch,small
+Running,Running jacket,small
+Running,Running belt,small
+Running,Running shorts,small
+Skiing,Ski jacket,medium
+Skiing,Ski trousers,medium
+Skiing,Ski pair,oversized
+Skiing,Ski poles,oversized
+Skiing,Ski boots,small
+Skiing,Ski helmet,small
+Skiing,Ski goggles,small
+American Football,Am. Football shoulder pads,medium
+American Football,Am. Football helmet,small
+American Football,Am. Football cleats,small
+American Football,Am. Football,small
+Basketball,Basketball,small
+Basketball,Basketball shoes,small
+Basketball,Basketball jersey,small
+Basketball,Basketball shorts,small
+Ice Hockey,Ice hockey shin pads,medium
+Ice Hockey,Ice hockey stick,oversized
+Ice Hockey,Ice hockey skates,small
+Ice Hockey,Ice hockey helmet,small
+Ice Hockey,Ice hockey gloves,small
+Ice Hockey,Ice hockey pads,small
+Netball,Netball,small
+Netball,Netball shoes,small
+Netball,Netball bib,small
+Cycling,Road bike,oversized
+Cycling,Cycling helmet,small
+Cycling,Cycling shoes,small
+Cycling,Cycling jersey,small
+Cycling,Bike lock,small
+Cycling,Cycling gloves,small
+Swimming,Swimming costume,small
+Swimming,Swimming goggles,small
+Swimming,Swim cap,small
+Swimming,Swimming fins,small
+Swimming,Kickboard,small
+Rugby,Rugby body armour,medium
+Rugby,Rugby ball,small
+Rugby,Rugby boots,small
+Rugby,Rugby shirt,small
+Rugby,Rugby headguard,small
+Badminton,Badminton racket,medium
+Badminton,Badminton shuttlecocks,small
+Badminton,Badminton shoes,small
+Badminton,Badminton bag,small
+Boxing & MMA,Punch bag,oversized
+Boxing & MMA,Boxing gloves,small
+Boxing & MMA,MMA gloves,small
+Boxing & MMA,Hand wraps,small
+Boxing & MMA,Headguard,small
+Boxing & MMA,Boxing boots,small

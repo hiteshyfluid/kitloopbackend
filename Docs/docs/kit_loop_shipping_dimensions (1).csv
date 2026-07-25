@@ -1,0 +1,88 @@
+Sport,Sport Tag,Product Category,Regulatory Max Dimensions,Regulatory Source,Typical Product Size,Typical Size Notes,Shipping Box (L x W x H cm),Est. Shipping Weight,Dimension Source
+Cricket,bat-ball,Cricket bat,965 x 108 x 67 mm (edge ≤ 40 mm),MCC Laws of Cricket — Law 5,860 x 105 x 60 mm,Adult SH (most common),100 x 15 x 10,1.1–1.4 kg,MCC Laws
+Cricket,bat-ball,Cricket helmet,—,No governing-body size limit,28 x 24 x 24 cm,Adult M/L,35 x 32 x 30,0.8–1.2 kg,Manufacturer spec
+Cricket,bat-ball,Batting pads,—,No size limit,56 x 19 x 12 cm,Adult pair,65 x 30 x 20 (pair),1.2–1.6 kg,Manufacturer spec
+Cricket,bat-ball,Batting gloves,—,No size limit,24 x 14 x 6 cm,Adult pair,28 x 18 x 10 (pair),0.3–0.5 kg,Manufacturer spec
+Cricket,bat-ball,Cricket ball,Ø 71.3 mm max / circumference 228 mm max,ICC Law 4,Ø 70 mm,Match ball,20 x 10 x 10 (3-pack),0.16 kg each / 0.52 kg (3-pack),ICC Laws of Cricket
+Cricket,bat-ball,Cricket shoes,—,Standard footwear,32 x 12 x 12 cm,UK 9,35 x 22 x 14,0.5–0.8 kg,Standard shoe box sizing
+Cricket,bat-ball,Wicket keeping gloves,—,No size limit,28 x 20 x 10 cm,Adult pair,34 x 24 x 14 (pair),0.4–0.6 kg,Manufacturer spec
+Golf,precision,Golf driver,1219 mm max shaft length (48 in); 46 in for elite events (MLR G-10),USGA/R&A Equipment Rules 2.1c,1143 mm (45 in),Standard men's driver,135 x 20 x 20,0.30–0.35 kg,USGA Equipment Rules
+Golf,precision,Golf irons (set),1219 mm max per club,USGA Equipment Rules 2.1c,990–1016 mm (3i–9i range),Typical men's set,115 x 35 x 15 (set of 7–9),4–6 kg,USGA Equipment Rules
+Golf,precision,Golf wedge,1219 mm max shaft length,USGA Equipment Rules 2.1c,900–940 mm,Standard length wedge,105 x 15 x 12,0.45–0.55 kg,USGA Equipment Rules
+Golf,precision,Golf putter,No upper length limit (putters exempt),USGA Equipment Rules 2.1c,850–890 mm (33–35 in),Standard putter,100 x 15 x 12,0.35–0.50 kg,USGA Equipment Rules
+Golf,precision,Golf bag,—,No governing-body limit,135 x 36 x 36 cm,Stand bag,145 x 40 x 40,2.5–4.0 kg (empty),Manufacturer spec
+Golf,precision,Golf ball,Ø 42.67 mm min diameter / 45.93 g max weight,USGA/R&A Equipment Rules,Ø 42.67 mm,Standard ball,18 x 6 x 6 (3-pack sleeve),0.14 kg (3-pack),USGA Equipment Rules
+Golf,precision,Golf shoes,—,Standard footwear,32 x 12 x 11 cm,UK 9,35 x 22 x 14,0.5–0.9 kg,Standard shoe box sizing
+Golf,precision,Golf glove,—,No regulation,20 x 12 x 2 cm,Adult M,24 x 16 x 5,0.05–0.08 kg,Manufacturer spec
+Tennis,racket,Tennis racket,737 x 317 mm overall / strung area ≤ 394 x 292 mm,ITF Rules of Tennis — Rule 4,686 x 290 mm (27 in),Standard adult frame,75 x 35 x 8,0.27–0.37 kg unstrung,ITF Rules of Tennis
+Tennis,racket,Tennis string (set),—,No regulation,12 m reel / 1.2–1.4 m set,Standard string set,15 x 15 x 5 (set),0.05–0.08 kg,Manufacturer spec
+Tennis,racket,Tennis ball,Ø 56.7–58.5 mm (ITF Type 2 standard),ITF Technical Regulation — Rule 3,Ø 67 mm,Standard pressurised ball,22 x 8 x 8 (4-pack),0.24 kg (4-pack),ITF Technical Regulation
+Tennis,racket,Tennis shoes,—,Standard footwear,32 x 12 x 11 cm,UK 9,35 x 22 x 14,0.5–0.8 kg,Standard shoe box sizing
+Tennis,racket,Tennis bag (racket),—,No regulation,75 x 35 x 28 cm,6-racket bag,80 x 38 x 30,1.2–2.0 kg,Manufacturer spec
+Padel,racket,Padel racket,455 x 260 x 38 mm (incl. handle),World Padel Tour / WPF Regulations,450 x 255 x 38 mm,Standard adult,52 x 32 x 12,0.34–0.38 kg,WPF Regulations
+Padel,racket,Padel ball,Ø 62.5–67.5 mm / pressure 11–13.5 psi,WPF Technical Regulation,Ø 65–68 mm,Standard ball,22 x 8 x 8 (3-pack),0.18 kg (3-pack),WPF Regulations
+Padel,racket,Padel shoes,—,Standard footwear,32 x 12 x 11 cm,UK 9,35 x 22 x 14,0.5–0.8 kg,Standard shoe box sizing
+Padel,racket,Padel bag,—,No regulation,70 x 35 x 30 cm,3-racket bag,75 x 38 x 32,1.0–1.8 kg,Manufacturer spec
+Squash,racket,Squash racket,686 mm total length / strung area ≤ 215 mm width,WSF Equipment Specification 2.1,685 x 200 mm,Standard adult,75 x 30 x 8,0.13–0.17 kg,WSF Equipment Spec
+Squash,racket,Squash ball,Ø 39.5–46.5 mm (varies by dot rating),WSF Specification,Ø 44 mm,Double-yellow dot,12 x 8 x 8 (3-pack),0.09 kg (3-pack),WSF Equipment Spec
+Squash,racket,Squash shoes,—,Standard footwear (non-marking sole required),32 x 12 x 11 cm,UK 9,35 x 22 x 14,0.5–0.8 kg,Standard shoe box sizing
+Squash,racket,Squash goggles,—,No size limit,18 x 6 x 4 cm,Adult,22 x 10 x 6,0.04–0.07 kg,Manufacturer spec
+Football,team,Football boots,—,No FIFA size limit; stud spec regulated,32 x 12 x 11 cm,Adult UK 9,35 x 22 x 14,0.4–0.7 kg,Standard shoe box sizing
+Football,team,Football (ball),Ø 216–227 mm / circumference 680–710 mm,FIFA Quality Pro Specification — Size 5,Ø 217 mm / circumference 685 mm,Size 5 match ball,32 x 32 x 32,0.41–0.45 kg,FIFA Laws of the Game
+Football,team,Goalkeeper gloves,—,No size limit,28 x 14 x 4 cm,Adult size 9,32 x 18 x 8 (pair),0.20–0.30 kg,Manufacturer spec
+Football,team,Shin pads,—,Must cover shin; no size limit,22 x 10 x 3 cm,Adult M,28 x 16 x 8 (pair),0.15–0.30 kg,Manufacturer spec
+Football,team,Football kit (shirt),—,No regulation,45 x 35 x 3 cm (folded),Adult M,28 x 22 x 5,0.15–0.25 kg,Manufacturer spec
+Running,endurance,Running shoes,Stack height ≤ 40 mm road / 50 mm track,World Athletics Technical Rules,32 x 12 x 11 cm,Adult UK 9,35 x 22 x 14,0.5–0.9 kg,World Athletics / Shoe box std
+Running,endurance,GPS running watch,—,No size regulation,5 x 5 x 1.5 cm (case),Standard sports watch,15 x 12 x 8,0.05–0.08 kg,Manufacturer spec
+Running,endurance,Running vest/top,—,No regulation,45 x 35 x 3 cm (folded),Adult M,28 x 22 x 5,0.10–0.20 kg,Manufacturer spec
+Running,endurance,Hydration vest,—,No regulation,50 x 30 x 8 cm (folded),Adult M/L,35 x 25 x 12,0.20–0.40 kg,Manufacturer spec
+Running,endurance,Running socks (pair),—,No regulation,15 x 10 x 3 cm,Adult UK 8–10,20 x 14 x 6,0.05–0.10 kg,Manufacturer spec
+Skiing,snow,Ski (pair),No FIS max for recreational; race minimums apply (e.g. slalom men ≥ 165 cm),FIS Competition Rules,155–185 cm L / tip ~130 mm W / waist 75–100 mm W,Adult all-mountain pair,195 x 15 x 15,5–9 kg (pair),FIS Rules / Manufacturer spec
+Skiing,snow,Ski boots (pair),—,No size limit; Mondopoint scale,33 x 28 x 18 cm,Adult Mondo 27,42 x 34 x 22,3–5 kg (pair),Manufacturer spec
+Skiing,snow,Ski poles (pair),—,No regulation,100–130 cm L / Ø 16–18 mm shaft,Adult length range,135 x 12 x 12,0.40–0.70 kg (pair),Manufacturer spec
+Skiing,snow,Ski helmet,—,CE EN 1077 / ASTM F2040 certified; no size limit,28 x 24 x 22 cm,Adult M/L,34 x 30 x 28,0.50–0.80 kg,Manufacturer spec
+Skiing,snow,Ski goggles,—,No size limit,20 x 10 x 8 cm,Adult,25 x 15 x 12,0.30–0.50 kg,Manufacturer spec
+Skiing,snow,Ski jacket,—,No regulation,45 x 35 x 10 cm (folded),Adult M,50 x 40 x 15,0.80–1.50 kg,Manufacturer spec
+Skiing,snow,Ski trousers,—,No regulation,40 x 30 x 8 cm (folded),Adult M,45 x 35 x 12,0.60–1.20 kg,Manufacturer spec
+American Football,team,Helmet,—,NOCSAE certified; no size limit,30 x 26 x 28 cm,Adult L,38 x 34 x 34,2.0–2.5 kg,Manufacturer spec
+American Football,team,Shoulder pads,—,No regulation,55 x 45 x 25 cm,Adult XL,62 x 52 x 32,2.0–4.0 kg,Manufacturer spec
+American Football,team,Football (ball),Long axis 280–286 mm / short circumference 527–537 mm,NFL Official Playing Rules,Long axis 280 mm,Official NFL size,35 x 22 x 22,0.39–0.43 kg,NFL Official Rules
+American Football,team,Cleats,—,Standard footwear,32 x 12 x 12 cm,Adult US 10,35 x 22 x 14,0.5–0.8 kg,Standard shoe box sizing
+American Football,team,Gloves (pair),—,No regulation,24 x 14 x 4 cm,Adult M,28 x 18 x 8,0.15–0.25 kg,Manufacturer spec
+Basketball,team,Basketball,Ø 235–239 mm / circumference 740–750 mm,FIBA Official Basketball Rules — Size 7,Ø 235 mm,Size 7 men's,34 x 34 x 34,0.56–0.65 kg,FIBA Official Rules
+Basketball,team,Basketball shoes,—,Standard footwear,33 x 12 x 14 cm,Adult US 10,36 x 22 x 16,0.6–1.0 kg,Standard shoe box sizing
+Basketball,team,Basketball shorts,—,No regulation,35 x 25 x 2 cm (folded),Adult M,28 x 22 x 5,0.15–0.25 kg,Manufacturer spec
+Basketball,team,Protective sleeve,—,No regulation,25 x 8 x 2 cm,Adult M,28 x 12 x 5,0.05–0.10 kg,Manufacturer spec
+Ice Hockey,ice,Hockey stick,1600 mm (63 in) max shaft / blade max 317 x 38 mm / curve ≤ 19 mm,NHL Official Rules — Rule 10.1,1524 mm (60 in),Adult senior,170 x 15 x 8,0.40–0.50 kg,NHL Official Rules
+Ice Hockey,ice,Ice skates (pair),—,No size regulation,32 x 22 x 18 cm,Adult size 10,40 x 30 x 22 (pair),2.0–3.0 kg (pair),Manufacturer spec
+Ice Hockey,ice,Helmet,—,CSA / HECC certified; no size limit,25 x 23 x 22 cm,Adult M,32 x 28 x 28,0.70–1.0 kg,Manufacturer spec
+Ice Hockey,ice,Hockey gloves (pair),—,No size limit,32 x 20 x 12 cm,Adult 14 in,38 x 26 x 16 (pair),0.70–1.0 kg (pair),Manufacturer spec
+Ice Hockey,ice,Shin pads (pair),—,No size limit,40 x 16 x 8 cm,Adult 14 in,45 x 22 x 18 (pair),0.60–0.90 kg (pair),Manufacturer spec
+Ice Hockey,ice,Puck,—,NHL: Ø 76 mm / thickness 25 mm / 156–170 g,Ø 76 x 25 mm,Standard match puck,18 x 10 x 8 (3-pack),0.50 kg (3-pack),NHL Official Rules
+Netball,team,Netball,Ø 222–229 mm / circumference 690–710 mm,INF Technical Specification — Size 5,Ø 224 mm,Size 5 match ball,30 x 30 x 30,0.40–0.45 kg,INF Technical Spec
+Netball,team,Netball shoes,—,Standard footwear,32 x 12 x 11 cm,Adult UK 6,35 x 20 x 13,0.50–0.80 kg,Standard shoe box sizing
+Netball,team,Netball dress/skort,—,No regulation,35 x 25 x 3 cm (folded),Adult M,28 x 22 x 6,0.15–0.30 kg,Manufacturer spec
+Netball,team,Knee pads (pair),—,No size limit,22 x 14 x 4 cm,Adult M,26 x 18 x 8,0.15–0.30 kg,Manufacturer spec
+Cycling,endurance,Road bike,UCI min weight 6.8 kg; no dimension limit,UCI Equipment Regulations,175 x 60 x 100 cm assembled,Size 54 cm frame,140 x 30 x 80 (part-assembled),7–10 kg,UCI Technical Regulations
+Cycling,endurance,Cycling helmet,—,CE EN 1078 / CPSC certified; no size limit,28 x 22 x 18 cm,Adult M/L,33 x 28 x 22,0.25–0.35 kg,Manufacturer spec
+Cycling,endurance,Cycling shoes (pair),—,Standard footwear (cleat-compatible),31 x 11 x 10 cm,EU 43,35 x 22 x 14,0.40–0.70 kg,Standard shoe box sizing
+Cycling,endurance,Cycling jersey,—,No regulation,35 x 25 x 3 cm (folded),Adult M,28 x 22 x 5,0.15–0.25 kg,Manufacturer spec
+Cycling,endurance,Power meter,—,No regulation,10 x 8 x 5 cm,Standard unit,18 x 14 x 10,0.10–0.30 kg,Manufacturer spec
+Swimming,water,Swimming goggles,—,No size limit; lens material regulated by FINA,19 x 7 x 4 cm,Adult,22 x 10 x 6,0.04–0.08 kg,Manufacturer spec
+Swimming,water,Racing suit / wetsuit,Max 1 mm thickness; no extra buoyancy material,World Aquatics (FINA) BER rules,60 x 40 x 4 cm (folded),Adult M,35 x 25 x 10,0.40–0.70 kg,World Aquatics BER Rules
+Swimming,water,Swim cap,—,No size limit,25 x 22 x 2 cm,Adult,28 x 25 x 5,0.05–0.08 kg,Manufacturer spec
+Swimming,water,Training fins (pair),—,No regulation,38 x 16 x 8 cm,Adult UK 9,42 x 20 x 12,0.40–0.70 kg,Manufacturer spec
+Swimming,water,Pull buoy,—,No regulation,25 x 12 x 12 cm,Standard,28 x 16 x 14,0.15–0.25 kg,Manufacturer spec
+Rugby,team,Rugby ball,Long axis 280–300 mm / circumference 580–620 mm,World Rugby Regulation 12 — Size 5,Long axis 292 mm,Size 5 match ball,36 x 23 x 23,0.41–0.46 kg,World Rugby Regulation 12
+Rugby,team,Rugby boots,—,No size limit; studs typically ≤ 21 mm,32 x 12 x 11 cm,Adult UK 9,35 x 22 x 14,0.50–0.80 kg,Standard shoe box sizing
+Rugby,team,Mouthguard,—,No governing-body size limit,9 x 6 x 2 cm,Standard,14 x 10 x 5,0.03–0.06 kg,Manufacturer spec
+Rugby,team,Body armour/vest,—,World Rugby approved; no size limit,45 x 35 x 5 cm (folded),Adult M,50 x 40 x 10,0.40–0.70 kg,Manufacturer spec
+Rugby,team,Scrum cap,—,World Rugby approved; no size limit,24 x 22 x 18 cm,Adult M/L,28 x 26 x 22,0.15–0.30 kg,Manufacturer spec
+Badminton,racket,Badminton racket,680 mm total length / 230 mm width,BWF Equipment Regulations 2.4,672 x 210 mm,Standard adult,75 x 28 x 7,0.08–0.10 kg,BWF Equipment Regulations
+Badminton,racket,Shuttlecock,Feather length 62–70 mm / base Ø 25–28 mm,BWF Equipment Regulation 2.1,Base Ø 26 mm / feather 66 mm,Standard feather,25 x 8 x 8 (12-pack),0.15 kg (12-pack),BWF Equipment Regulations
+Badminton,racket,Badminton shoes (pair),—,Standard footwear (non-marking sole required),32 x 12 x 11 cm,Adult UK 9,35 x 22 x 14,0.50–0.80 kg,Standard shoe box sizing
+Boxing & MMA,combat,Boxing gloves (pair),—,Weight class determines oz; no dimension limit,23 x 14 x 12 cm,Adult 12 oz,28 x 18 x 16 (pair),0.67–0.90 kg (12 oz pair),Manufacturer spec
+Boxing & MMA,combat,Punch bag,—,No regulation,120 x 35 cm (hanging),Standard heavy bag,130 x 40 x 40,25–45 kg,Manufacturer spec
+Boxing & MMA,combat,Head guard,—,No size limit,28 x 25 x 22 cm,Adult M,34 x 30 x 26,0.40–0.70 kg,Manufacturer spec
+Boxing & MMA,combat,Gum shield,—,No size limit,9 x 6 x 2 cm,Standard,14 x 10 x 5,0.03–0.06 kg,Manufacturer spec
+Boxing & MMA,combat,MMA shorts,—,No regulation,35 x 30 x 2 cm (folded),Adult M,28 x 22 x 5,0.15–0.25 kg,Manufacturer spec
