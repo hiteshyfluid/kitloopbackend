@@ -28,6 +28,10 @@ const updateListingSchema = z.object({
   price: z.coerce.number().min(1, 'Price must be at least £1.00').max(9999, 'Price must be under £9,999.00').optional(),
   parcel_size: z.string().refine((v) => VALID_PARCEL_SIZES.includes(v), { message: `Parcel size must be one of: ${VALID_PARCEL_SIZES.join(', ')}` }).optional(),
   video_url: z.string().url().nullable().optional(),
+  photo_urls: z.array(z.string().url()).min(1, 'At least one photo is required').max(10, 'Up to 10 photos').optional(),
+  sport_id: UUID.optional(),
+  sub_category_id: UUID.optional(),
+  brand_id: UUID.optional(),
 });
 
 const searchSchema = z.object({

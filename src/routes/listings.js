@@ -2,6 +2,7 @@ const express = require('express');
 
 const requireAuth = require('../middleware/auth');
 const listingUpload = require('../middleware/upload');
+const cacheControl = require('../middleware/cacheControl');
 const listingController = require('../controllers/listingController');
 
 const { optionalAuth } = requireAuth;
@@ -24,6 +25,7 @@ router.get('/listings/:id', optionalAuth, listingController.getListing);
 
 // ─── Public: search, browse, homepage ────────────────────────────────────────
 router.get('/listings', listingController.searchListings);
+router.get('/search/suggest', cacheControl(60), listingController.searchSuggest);
 router.get('/home', optionalAuth, listingController.getHomepageData);
 
 // ─── Share (analytics — no auth required, records user_id if present) ─────────

@@ -16,9 +16,14 @@ const _processedEventIds = new Set();
 router.post(
   '/stripe',
   express.raw({ type: 'application/json' }),
-  (req, res) => {
+  async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    // Signing secret from Admin → Payment settings (falls back to .env)
+    const webhookSecret = await stripe.getWebhookSecret();
+    if (!webhookSecret) {
+      console.error('[webhook] No Stripe webhook signing secret configured');
+      return res.status(400).json({ error: 'Webhook signing secret is not configured' });
+    }
 
     let event;
     try {
@@ -81,8 +86,8 @@ async function handleEvent(event) {
 async function onPaymentIntentSucceeded(event) {
   const pi = event.data.object;
 
-  // DB-level idempotency: order already created via /confirm?
-  const existing = await prisma.payment.findUnique({
+  // DB-level idempotency: order(s) already created via /confirm?
+  const existing = await prisma.payment.findFirst({
     where: { stripePaymentIntentId: pi.id },
   });
   if (existing) {
@@ -111,11 +116,13 @@ async function onPaymentIntentFailed(event) {
   const pi = event.data.object;
   console.warn('[webhook] Payment failed for PI:', pi.id, pi.last_payment_error?.message);
 
-  // If a payment record exists (unlikely at this stage), mark it failed
-  const payment = await prisma.payment.findUnique({
+  // If payment record(s) exist (unlikely at this stage), mark them failed.
+  // A cart checkout shares one PaymentIntent across several orders.
+  const payments = await prisma.payment.findMany({
     where: { stripePaymentIntentId: pi.id },
+    select: { id: true },
   });
-  if (payment) {
+  for (const payment of payments) {
     await prisma.payment.update({
       where: { id: payment.id },
       data: { paymentStatus: 'failed' },
@@ -168,11 +175,29 @@ async function onChargeRefunded(event) {
   const charge = event.data.object;
   const amountRefunded = charge.amount_refunded / 100; // pence → pounds
 
-  const payment = await prisma.payment.findUnique({
+  const payments = await prisma.payment.findMany({
     where: { stripeChargeId: charge.id },
   });
-  if (!payment) return;
+  if (!payments.length) return;
 
+  // Cart checkouts share one charge across several orders. Per-order refunds
+  // (dispute rulings) already record their own amount, so only a full refund
+  // of the whole charge is applied here.
+  if (payments.length > 1) {
+    if (charge.refunded || charge.amount_refunded >= charge.amount) {
+      for (const p of payments) {
+        await prisma.payment.update({
+          where: { id: p.id },
+          data: { amountRefunded: Number(p.amountTotal), paymentStatus: 'refunded', escrowStatus: 'refunded' },
+        });
+        appendWebhookEvent(p.id, event.id, event.type);
+      }
+    }
+    console.log('[webhook] charge.refunded (shared charge):', charge.id, 'orders:', payments.length);
+    return;
+  }
+
+  const payment = payments[0];
   await prisma.payment.update({
     where: { id: payment.id },
     data: {

@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { generateOgImage } = require('./cloudinaryService');
+const { textSearchWhere } = require('./searchService');
 
 // ─── View-count deduplication cache ───────────────────────────────────────────
 // Prevents counting more than one view per user/IP per listing per hour.
@@ -202,12 +203,7 @@ async function searchListings(filters) {
   const where = { status: 'live' };
 
   if (q) {
-    where.OR = [
-      { title: { contains: q, mode: 'insensitive' } },
-      { description: { contains: q, mode: 'insensitive' } },
-      { brand: { name: { contains: q, mode: 'insensitive' } } },
-      { subCategory: { name: { contains: q, mode: 'insensitive' } } },
-    ];
+    Object.assign(where, textSearchWhere(q));
   }
 
   if (sport) {
@@ -343,16 +339,38 @@ async function getHomepageData(userId) {
 async function updateListing(listingId, sellerId, data) {
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
-    select: { id: true, sellerId: true, status: true, parcelSize: true },
+    select: { id: true, sellerId: true, status: true, parcelSize: true, sportId: true },
   });
 
   if (!listing) throw new AppError('Listing not found', 404, 'LISTING_NOT_FOUND');
   if (listing.sellerId !== sellerId) throw new AppError('Forbidden', 403, 'FORBIDDEN');
   if (listing.status === 'flagged') throw new AppError('Flagged listings cannot be edited', 403, 'LISTING_FLAGGED');
   if (listing.status === 'removed') throw new AppError('Removed listings cannot be edited', 403, 'LISTING_REMOVED');
+  if (listing.status !== 'draft') throw new AppError('Only draft listings can be edited', 403, 'LISTING_NOT_EDITABLE');
 
-  const { title, description, condition, colour, price, parcelSize, photos, videoUrl } = data;
+  const { title, description, condition, colour, price, parcelSize, photos, videoUrl, sportId, subCategoryId, brandId } = data;
   const updateData = {};
+
+  // Category changes: the sub-category must belong to the (new or current) sport
+  if (sportId !== undefined || subCategoryId !== undefined) {
+    if (sportId !== undefined && subCategoryId === undefined) {
+      throw new AppError('Choose a category for the new sport', 400, 'SUB_CATEGORY_REQUIRED');
+    }
+    const targetSportId = sportId ?? listing.sportId;
+    const subCategory = await prisma.subCategory.findFirst({
+      where: { id: subCategoryId, sportId: targetSportId, status: 'active' },
+      select: { id: true },
+    });
+    if (!subCategory) throw new AppError('That category does not belong to the selected sport', 400, 'INVALID_SUB_CATEGORY');
+    if (sportId !== undefined) updateData.sportId = sportId;
+    updateData.subCategoryId = subCategoryId;
+  }
+
+  if (brandId !== undefined) {
+    const brand = await prisma.brand.findFirst({ where: { id: brandId, status: 'active' }, select: { id: true } });
+    if (!brand) throw new AppError('Brand not found', 400, 'INVALID_BRAND');
+    updateData.brandId = brandId;
+  }
 
   if (title !== undefined) updateData.title = title;
   if (description !== undefined) updateData.description = description;
@@ -499,6 +517,7 @@ async function getMyFavourites(userId, filters) {
             status: true,
             colour: true,
             brand: { select: { id: true, name: true, slug: true } },
+            sport: { select: { id: true, name: true, slug: true } },
             seller: { select: { id: true, username: true, verifiedSeller: true } },
           },
         },

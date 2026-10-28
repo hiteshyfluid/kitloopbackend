@@ -14,6 +14,19 @@ enum UserRole {
   seller
   both
   admin
+  super_admin
+}
+
+enum IntegrationProvider {
+  stripe
+  moov
+  general
+}
+
+enum IntegrationEnvironment {
+  test
+  live
+  shared
 }
 
 enum AccountStatus {
@@ -205,6 +218,9 @@ enum AdminActionType {
   sport_hidden
   site_setting_updated
   listing_featured
+  integration_settings_updated
+  integration_settings_tested
+  integration_mode_changed
 }
 
 enum BadgeAction {
@@ -307,6 +323,8 @@ model User {
   reviewsGiven               Review[]         @relation("ReviewReviewer")
   reviewsReceived            Review[]         @relation("ReviewSeller")
   favourites                 Favourite[]
+  cartItems                  CartItem[]
+  integrationSettingsUpdated IntegrationSetting[]
   notifications              Notification[]
   auditLogs                  AuditLog[]
   sellerBadgesSeller         SellerBadge[]    @relation("BadgeSeller")
@@ -443,6 +461,7 @@ model Listing {
   offers                  Offer[]
   counterOffers           CounterOffer[]
   favourites              Favourite[]
+  cartItems               CartItem[]
   shares                  Share[]
 
   @@index([sellerId], map: "idx_listings_seller_id")
@@ -511,8 +530,9 @@ model Payment {
   orderId                  String              @unique @map("order_id") @db.Uuid
   buyerId                  String              @map("buyer_id") @db.Uuid
   sellerId                 String              @map("seller_id") @db.Uuid
-  stripePaymentIntentId    String              @unique @map("stripe_payment_intent_id") @db.VarChar(255)
-  stripeChargeId           String?             @unique @map("stripe_charge_id") @db.VarChar(255)
+  // Not unique: one cart checkout charge can pay for several orders
+  stripePaymentIntentId    String              @map("stripe_payment_intent_id") @db.VarChar(255)
+  stripeChargeId           String?             @map("stripe_charge_id") @db.VarChar(255)
   stripeTransferId         String?             @unique @map("stripe_transfer_id") @db.VarChar(255)
   stripeRefundId           String?             @map("stripe_refund_id") @db.VarChar(255)
   amountTotal              Decimal             @map("amount_total") @db.Decimal(10, 2)
@@ -545,6 +565,8 @@ model Payment {
   @@index([paymentStatus], map: "idx_payments_payment_status")
   @@index([escrowStatus], map: "idx_payments_escrow_status")
   @@index([payoutStatus], map: "idx_payments_payout_status")
+  @@index([stripePaymentIntentId], map: "idx_payments_stripe_payment_intent_id")
+  @@index([stripeChargeId], map: "idx_payments_stripe_charge_id")
   @@map("payments")
 }
 
@@ -715,6 +737,22 @@ model Favourite {
   @@map("favourites")
 }
 
+model CartItem {
+  id                       String    @id @default(uuid()) @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+  listingId                String    @map("listing_id") @db.Uuid
+  createdAt                DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing                  Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId], map: "idx_cart_items_user_listing")
+  @@index([userId], map: "idx_cart_items_user_id")
+  @@index([listingId], map: "idx_cart_items_listing_id")
+  @@map("cart_items")
+}
+
 model Notification {
   id                       String           @id @default(uuid()) @db.Uuid
   userId                   String           @map("user_id") @db.Uuid
@@ -837,4 +875,23 @@ model SiteSetting {
   updatedByUser User?    @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@map("site_settings")
+}
+
+// Third-party credentials (Stripe, Moov) set by a super admin. `secrets` holds
+// AES-256-GCM encrypted values; see services/integrationSettingsService.js.
+model IntegrationSetting {
+  id          String                 @id @default(uuid()) @db.Uuid
+  provider    IntegrationProvider
+  environment IntegrationEnvironment
+  config      Json                   @default("{}")
+  secrets     Json                   @default("{}")
+  isActive    Boolean                @default(false) @map("is_active")
+  updatedById String?                @map("updated_by") @db.Uuid
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+
+  updatedBy   User?                  @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([provider, environment], map: "uq_integration_settings_provider_env")
+  @@map("integration_settings")
 }

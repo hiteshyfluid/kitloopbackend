@@ -39,6 +39,12 @@ const initiateCheckout = catchAsync(async (req, res) => {
   sendSuccess(res, 201, { session });
 });
 
+// POST /api/checkout/cart/initiate — one session for every available cart item
+const initiateCartCheckout = catchAsync(async (req, res) => {
+  const session = await checkoutService.initiateCartCheckout(req.user.id);
+  sendSuccess(res, 201, { session });
+});
+
 // GET /api/checkout/:session_id
 const getCheckoutSession = catchAsync(async (req, res) => {
   const session = checkoutService.getCheckoutSession(req.params.session_id, req.user.id);
@@ -68,15 +74,18 @@ const createPaymentIntent = catchAsync(async (req, res) => {
 // POST /api/checkout/:session_id/confirm
 const confirmOrder = catchAsync(async (req, res) => {
   const { payment_intent_id } = validate(confirmSchema, req.body);
-  const order = await checkoutService.confirmOrder(
+  const result = await checkoutService.confirmOrder(
     req.params.session_id,
     req.user.id,
     payment_intent_id
   );
-  sendSuccess(res, 201, { order });
+  // Cart checkouts create several orders; `order` stays the first for older clients
+  if (result?.orders) sendSuccess(res, 201, { orders: result.orders, order: result.orders[0] });
+  else sendSuccess(res, 201, { order: result });
 });
 
 module.exports = {
+  initiateCartCheckout,
   initiateCheckout,
   getCheckoutSession,
   submitAddress,

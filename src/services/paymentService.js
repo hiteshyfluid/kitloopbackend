@@ -3,9 +3,30 @@ const stripe = require('../lib/stripe');
 const AppError = require('../utils/AppError');
 const { notify } = require('./notificationService');
 
-// ─── Ensure the user has a Stripe customer ID ──────────────────────────────────
+// A saved customer ID can stop existing in the current Stripe account (e.g. after
+// switching between test/live keys or Stripe accounts). Treat that as "no customer".
+function isMissingCustomer(err) {
+  return err?.code === 'resource_missing' || /No such customer/i.test(err?.message ?? '');
+}
+
+async function stripeCustomerExists(customerId) {
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    return !customer.deleted;
+  } catch (err) {
+    if (isMissingCustomer(err)) return false;
+    throw err;
+  }
+}
+
+// ─── Ensure the user has a valid Stripe customer ID ────────────────────────────
 async function ensureStripeCustomer(user) {
-  if (user.stripeCustomerId) return user.stripeCustomerId;
+  if (user.stripeCustomerId && await stripeCustomerExists(user.stripeCustomerId)) {
+    return user.stripeCustomerId;
+  }
+  if (user.stripeCustomerId) {
+    console.warn('[stripe] customer', user.stripeCustomerId, 'not found for user', user.id, '— creating a new one');
+  }
 
   const customer = await stripe.customers.create({
     email: user.email,
@@ -181,10 +202,17 @@ async function getSavedCards(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user.stripeCustomerId) return { cards: [] };
 
-  const methods = await stripe.paymentMethods.list({
-    customer: user.stripeCustomerId,
-    type: 'card',
-  });
+  let methods;
+  try {
+    methods = await stripe.paymentMethods.list({
+      customer: user.stripeCustomerId,
+      type: 'card',
+    });
+  } catch (err) {
+    // Stale customer from another Stripe account/mode — no usable saved cards
+    if (isMissingCustomer(err)) return { cards: [] };
+    throw err;
+  }
 
   const cards = methods.data.map((pm) => ({
     id: pm.id,
@@ -290,6 +318,7 @@ async function removeBankAccount(userId) {
 }
 
 module.exports = {
+  ensureStripeCustomer,
   getSellerBalance,
   getTransactionHistory,
   requestPayout,

@@ -111,7 +111,7 @@ async function raiseDispute(orderId, buyerId, { reason, description, evidencePho
 
 async function notifyAdmins(disputeId, listingTitle) {
   const admins = await prisma.user.findMany({
-    where: { role: 'admin', accountStatus: 'active' },
+    where: { role: { in: ['admin', 'super_admin'] }, accountStatus: 'active' },
     select: { id: true },
   });
   await Promise.all(
@@ -132,7 +132,7 @@ async function getDisputeDetail(disputeId, userId) {
 
   if (!dispute) throw new AppError('Dispute not found', 404, 'NOT_FOUND');
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   if (!isAdmin && dispute.buyerId !== userId && dispute.sellerId !== userId) {
     throw new AppError('Forbidden', 403, 'FORBIDDEN');
   }

@@ -8,6 +8,7 @@
     "seed": "node src/jobs/seedData.js",
     "seed:test": "node src/jobs/testSeed.js",
     "seed:test:reset": "node src/jobs/testSeed.js --reset",
+    "make-super-admin": "node src/jobs/makeSuperAdmin.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

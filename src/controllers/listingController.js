@@ -3,6 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const { sendSuccess } = require('../utils/response');
 const cloudinaryService = require('../services/cloudinaryService');
 const listingService = require('../services/listingService');
+const searchService = require('../services/searchService');
 const {
   createListingSchema,
   updateListingSchema,
@@ -93,8 +94,8 @@ const updateListing = catchAsync(async (req, res) => {
   let photos;
   if (photoFiles?.length) {
     photos = await Promise.all(photoFiles.map((f) => cloudinaryService.uploadPhoto(f)));
-  } else if (body.photos !== undefined) {
-    photos = typeof body.photos === 'string' ? JSON.parse(body.photos) : body.photos;
+  } else if (body.photo_urls !== undefined) {
+    photos = body.photo_urls;
   }
 
   let videoUrl;
@@ -108,8 +109,15 @@ const updateListing = catchAsync(async (req, res) => {
   if (photos !== undefined) updateData.photos = photos;
   if (videoUrl !== undefined) updateData.videoUrl = videoUrl;
   if (body.parcel_size !== undefined) updateData.parcelSize = body.parcel_size;
+  if (body.sport_id !== undefined) updateData.sportId = body.sport_id;
+  if (body.sub_category_id !== undefined) updateData.subCategoryId = body.sub_category_id;
+  if (body.brand_id !== undefined) updateData.brandId = body.brand_id;
   delete updateData.parcel_size;
   delete updateData.video_url;
+  delete updateData.photo_urls;
+  delete updateData.sport_id;
+  delete updateData.sub_category_id;
+  delete updateData.brand_id;
 
   const listing = await listingService.updateListing(req.params.id, req.user.id, updateData);
   sendSuccess(res, 200, { listing });
@@ -132,6 +140,13 @@ const getMyListings = catchAsync(async (req, res) => {
 const searchListings = catchAsync(async (req, res) => {
   const filters = validate(searchSchema, req.query);
   const result = await listingService.searchListings(filters);
+  sendSuccess(res, 200, result);
+});
+
+// ─── GET /api/search/suggest ──────────────────────────────────────────────────
+const searchSuggest = catchAsync(async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q : '';
+  const result = await searchService.suggest(q);
   sendSuccess(res, 200, result);
 });
 
@@ -175,6 +190,7 @@ module.exports = {
   deleteListing,
   getMyListings,
   searchListings,
+  searchSuggest,
   getHomepageData,
   recordShare,
   getSharePreview,

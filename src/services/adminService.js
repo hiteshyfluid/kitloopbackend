@@ -17,7 +17,7 @@ function pence(amount) {
 
 async function allAdminIds() {
   const admins = await prisma.user.findMany({
-    where: { role: 'admin', accountStatus: 'active' },
+    where: { role: { in: ['admin', 'super_admin'] }, accountStatus: 'active' },
     select: { id: true },
   });
   return admins.map((a) => a.id);

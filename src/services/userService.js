@@ -17,6 +17,7 @@ const OWN_PROFILE_SELECT = {
   stripeConnectId: true, stripeCustomerId: true,
   bankAccountLast4: true, bankSortCodeMasked: true,
   defaultParcelSize: true,
+  preferredSports: true,
   updatedAt: true,
 };
 
@@ -31,8 +32,9 @@ async function getOwnProfile(userId) {
 }
 
 // ─── updateProfile ────────────────────────────────────────────────────────────
-async function updateProfile(userId, { displayName, username, avatarUrl }) {
+async function updateProfile(userId, { displayName, username, avatarUrl, preferredSports }) {
   const data = {};
+  if (preferredSports !== undefined) data.preferredSports = [...new Set(preferredSports)];
   if (displayName !== undefined) data.displayName = displayName.trim();
   if (username    !== undefined) data.username    = username.trim().toLowerCase();
   if (avatarUrl   !== undefined) data.avatarUrl   = avatarUrl;

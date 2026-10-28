@@ -17,6 +17,7 @@ const updateProfileSchema = z.object({
   display_name: z.string().trim().min(1).max(60).optional(),
   username:     z.string().trim().min(3).max(30).regex(/^[a-z0-9_.-]+$/i, 'Username may only contain letters, numbers, underscores, hyphens and dots').optional(),
   avatar_url:   z.string().url().optional(),
+  preferred_sports: z.array(z.string().uuid()).max(30).optional(),
 });
 
 const notifSchema = z.object({
@@ -57,11 +58,12 @@ const getOwnProfile = catchAsync(async (req, res) => {
 
 // PUT /api/users/profile
 const updateProfile = catchAsync(async (req, res) => {
-  const { display_name, username, avatar_url } = validate(updateProfileSchema, req.body);
+  const { display_name, username, avatar_url, preferred_sports } = validate(updateProfileSchema, req.body);
   const user = await userService.updateProfile(req.user.id, {
     displayName: display_name,
     username,
     avatarUrl: avatar_url,
+    preferredSports: preferred_sports,
   });
   sendSuccess(res, 200, { user });
 });

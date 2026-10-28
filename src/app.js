@@ -10,6 +10,7 @@ const brandsRouter = require('./routes/brands');
 const listingsRouter = require('./routes/listings');
 const uploadRouter = require('./routes/upload');
 const checkoutRouter = require('./routes/checkout');
+const cartRouter = require('./routes/cart');
 const ordersRouter = require('./routes/orders');
 const paymentsRouter = require('./routes/payments');
 const webhooksRouter = require('./routes/webhooks');
@@ -19,6 +20,8 @@ const reviewsRouter       = require('./routes/reviews');
 const usersRouter         = require('./routes/users');
 const notificationsRouter = require('./routes/notifications');
 const adminRouter         = require('./routes/admin');
+const integrationSettingsRouter = require('./routes/integrationSettings');
+const configRouter        = require('./routes/config');
 const { toSnakeCase } = require('./utils/caseConvert');
 
 const app = express();
@@ -60,6 +63,7 @@ app.use('/api/sports', sportsRouter);
 app.use('/api/brands', brandsRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/checkout', checkoutRouter);
+app.use('/api/cart', cartRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/offers', offersRouter);
@@ -68,7 +72,10 @@ app.use('/api/disputes', disputesRouter);
 app.use('/api/sellers', reviewsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/notifications', notificationsRouter);
+// Super-admin integration keys (Stripe/Moov) — must be mounted before the general admin router
+app.use('/api/admin/settings/integrations', integrationSettingsRouter);
 app.use('/api/admin',         adminRouter);
+app.use('/api/config',        configRouter);
 app.use('/api', listingsRouter);
 
 app.use((req, res) => {
