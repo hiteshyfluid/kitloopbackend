@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
 const { OAuth2Client } = require('google-auth-library');
 const jwksClient = require('jwks-rsa');
@@ -22,6 +23,14 @@ const SMS_CODE_EXPIRY_MS = 10 * 60 * 1000;
 const TWO_FACTOR_ISSUER = 'Kit Loop';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const gmailUser = process.env.GMAIL_USER;
+const gmailPass = process.env.GMAIL_APP_PASSWORD;
+const gmailTransporter = gmailUser && gmailPass
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: gmailUser, pass: gmailPass },
+    })
+  : null;
 const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
 const appleJwksClient = jwksClient({ jwksUri: 'https://appleid.apple.com/auth/keys' });
 
@@ -139,19 +148,23 @@ async function createSession(userId, meta = {}) {
   return { token, session };
 }
 
-// ─── Email sending (Resend) ───
+// ─── Email sending (Gmail SMTP, then Resend, then console) ───
 
 async function sendEmail({ to, subject, html }) {
-  if (!resend) {
-    console.log(`[email:dev] To: ${to} | Subject: ${subject}\n${html}`);
+  const from = process.env.EMAIL_FROM
+    || (gmailUser ? `Kit Loop <${gmailUser}>` : 'Kit Loop <no-reply@kitloop.app>');
+
+  if (gmailTransporter) {
+    await gmailTransporter.sendMail({ from, to, subject, html });
     return;
   }
-  await resend.emails.send({
-    from: process.env.EMAIL_FROM || 'Kit Loop <no-reply@kitloop.app>',
-    to,
-    subject,
-    html,
-  });
+
+  if (resend) {
+    await resend.emails.send({ from, to, subject, html });
+    return;
+  }
+
+  console.log(`[email:dev] To: ${to} | Subject: ${subject}\n${html}`);
 }
 
 // Dev-only fallback — wire up a real SMS provider (e.g. Twilio) before production.

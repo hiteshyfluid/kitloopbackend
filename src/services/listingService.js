@@ -13,6 +13,8 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref();
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // ─── Shipping fee lookup ───────────────────────────────────────────────────────
 const SHIPPING_FEE_DEFAULTS = { small: 3.49, medium: 5.49, large: 8.99, oversized: 14.99 };
 
@@ -120,6 +122,9 @@ async function publishListing(listingId, sellerId) {
 
 // ─── 3. getListing ────────────────────────────────────────────────────────────
 async function getListing(listingId, requestingUserId, requestIp) {
+  // A malformed id can never match — answer 404 rather than letting Prisma throw a 500
+  if (!UUID_RE.test(listingId)) throw new AppError('Listing not found', 404, 'LISTING_NOT_FOUND');
+
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
     select: {
@@ -198,9 +203,11 @@ async function getListing(listingId, requestingUserId, requestIp) {
 
 // ─── 4. searchListings ────────────────────────────────────────────────────────
 async function searchListings(filters) {
-  const { q, sport, sub_category, condition, brand, colour, price_min, price_max, sort, featured, page, page_size } = filters;
+  const { q, sport, sub_category, seller, condition, brand, colour, price_min, price_max, sort, featured, page, page_size } = filters;
 
   const where = { status: 'live' };
+
+  if (seller) where.sellerId = seller;
 
   if (q) {
     Object.assign(where, textSearchWhere(q));
@@ -346,7 +353,8 @@ async function updateListing(listingId, sellerId, data) {
   if (listing.sellerId !== sellerId) throw new AppError('Forbidden', 403, 'FORBIDDEN');
   if (listing.status === 'flagged') throw new AppError('Flagged listings cannot be edited', 403, 'LISTING_FLAGGED');
   if (listing.status === 'removed') throw new AppError('Removed listings cannot be edited', 403, 'LISTING_REMOVED');
-  if (listing.status !== 'draft') throw new AppError('Only draft listings can be edited', 403, 'LISTING_NOT_EDITABLE');
+  // Per the API spec only sold listings are locked; order snapshots are never touched here.
+  if (listing.status === 'sold') throw new AppError('Sold listings cannot be edited', 409, 'LISTING_SOLD');
 
   const { title, description, condition, colour, price, parcelSize, photos, videoUrl, sportId, subCategoryId, brandId } = data;
   const updateData = {};
@@ -377,7 +385,11 @@ async function updateListing(listingId, sellerId, data) {
   if (condition !== undefined) updateData.condition = condition;
   if (colour !== undefined) updateData.colour = colour;
   if (price !== undefined) updateData.price = price;
-  if (photos !== undefined) updateData.photos = photos;
+  if (photos !== undefined) {
+    updateData.photos = photos;
+    // Keep the share image in step with the cover photo once a listing is published
+    if (listing.status !== 'draft' && photos.length) updateData.ogImageUrl = generateOgImage(photos[0]);
+  }
   if (videoUrl !== undefined) updateData.videoUrl = videoUrl ?? null;
 
   if (parcelSize !== undefined) {
@@ -541,6 +553,16 @@ async function getMyFavourites(userId, filters) {
   };
 }
 
+// ─── 10b. getMyFavouriteIds ───────────────────────────────────────────────────
+// Lets listing cards show the saved state without loading full favourite rows.
+async function getMyFavouriteIds(userId) {
+  const rows = await prisma.favourite.findMany({
+    where: { userId },
+    select: { listingId: true },
+  });
+  return { listingIds: rows.map((r) => r.listingId) };
+}
+
 // ─── 11. recordShare ─────────────────────────────────────────────────────────
 async function recordShare(listingId, userId, destination, surface) {
   const listing = await prisma.listing.findUnique({
@@ -585,6 +607,7 @@ module.exports = {
   getMyListings,
   toggleFavourite,
   getMyFavourites,
+  getMyFavouriteIds,
   recordShare,
   getSharePreview,
 };

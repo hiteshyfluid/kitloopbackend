@@ -182,6 +182,13 @@ const getMyFavourites = catchAsync(async (req, res) => {
   sendSuccess(res, 200, result);
 });
 
+// ─── GET /api/favourites/ids ─────────────────────────────────────────────────
+const getMyFavouriteIds = catchAsync(async (req, res) => {
+  const result = await listingService.getMyFavouriteIds(req.user.id);
+  res.set('Cache-Control', 'no-store');
+  sendSuccess(res, 200, result);
+});
+
 module.exports = {
   createListing,
   publishListing,
@@ -196,4 +203,5 @@ module.exports = {
   getSharePreview,
   toggleFavourite,
   getMyFavourites,
+  getMyFavouriteIds,
 };

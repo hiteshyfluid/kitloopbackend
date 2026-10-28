@@ -38,6 +38,7 @@ const searchSchema = z.object({
   q: z.string().trim().optional(),
   sport: z.string().trim().optional(),
   sub_category: z.string().trim().optional(),
+  seller: UUID.optional(),
   condition: z.string().trim().optional(),
   brand: z.string().trim().optional(),
   colour: z.string().trim().optional(),

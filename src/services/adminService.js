@@ -718,7 +718,9 @@ async function unhideSport(sportId, adminId) {
     const result = await tx.sport.update({ where: { id: sportId }, data: { status: 'active' } });
     await tx.auditLog.create({
       data: {
-        adminId, actionType: 'sport_unhidden', targetType: 'sport', targetId: sportId,
+        // The AdminActionType enum has no 'sport_unhidden' value, and logging one made
+        // the whole transaction fail. Record it like a status edit (hidden → active).
+        adminId, actionType: 'category_edited', targetType: 'sport', targetId: sportId,
         previousValue: { status: sport.status },
         newValue:      { status: 'active' },
       },
@@ -987,7 +989,8 @@ async function updateFeeConfig(configId, adminId, { configValue, internalNote } 
 
 // ─── SITE SETTINGS ─────────────────────────────────────────────────────────
 
-const SITE_SETTING_KEYS = ['homepage_hero_image_url'];
+// site_logo_url: header logo · site_logo_footer_url: optional variant for the dark footer
+const SITE_SETTING_KEYS = ['homepage_hero_image_url', 'site_logo_url', 'site_logo_footer_url'];
 
 async function getSiteSettings() {
   const rows = await prisma.siteSetting.findMany({ where: { settingKey: { in: SITE_SETTING_KEYS } } });

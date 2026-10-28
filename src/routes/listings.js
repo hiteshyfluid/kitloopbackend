@@ -33,6 +33,7 @@ router.post('/listings/:id/share', optionalAuth, listingController.recordShare);
 
 // ─── Favourites ───────────────────────────────────────────────────────────────
 router.post('/listings/:id/favourite', requireAuth, listingController.toggleFavourite);
+router.get('/favourites/ids', requireAuth, listingController.getMyFavouriteIds);
 router.get('/favourites', requireAuth, listingController.getMyFavourites);
 
 module.exports = router;

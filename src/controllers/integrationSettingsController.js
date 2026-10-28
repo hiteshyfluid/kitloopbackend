@@ -5,6 +5,8 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const { sendSuccess } = require('../utils/response');
 const settings = require('../services/integrationSettingsService');
+const prisma = require('../lib/prisma');
+const { getFeeValue } = require('../services/checkoutService');
 const { testStripe, testMoov } = require('../services/integrationTestService');
 
 function validate(schema, data) {
@@ -64,14 +66,29 @@ const testConnection = catchAsync(async (req, res) => {
 // ─── GET /api/config/public ──────────────────────────────────────────────────
 // Public, non-secret configuration for the frontend. The Stripe publishable key
 // is the only credential ever exposed.
+const BRANDING_KEYS = ['site_logo_url', 'site_logo_footer_url'];
+
 const publicConfig = catchAsync(async (req, res) => {
-  const [stripe, moov] = await Promise.all([settings.getActive('stripe'), settings.getActive('moov')]);
+  const [stripe, moov, brandingRows, buyerProtectionPct] = await Promise.all([
+    settings.getActive('stripe'),
+    settings.getActive('moov'),
+    prisma.siteSetting.findMany({ where: { settingKey: { in: BRANDING_KEYS } } }),
+    getFeeValue('buyer_protection_fee_percentage'),
+  ]);
+  const branding = Object.fromEntries(brandingRows.map((r) => [r.settingKey, r.settingValue]));
   res.set('Cache-Control', 'public, max-age=60');
   sendSuccess(res, 200, {
     stripe: stripe?.config.publishable_key
       ? { publishableKey: stripe.config.publishable_key, mode: stripe.environment }
       : null,
     shipping: { enabledCouriers: moov?.config.enabled_couriers ?? [] },
+    // Same value checkout charges, so listing pages can show the buyer's real total
+    fees: { buyerProtectionPct },
+    // Logos set in Admin → Branding; null means "use the built-in wordmark"
+    branding: {
+      logoUrl: branding.site_logo_url ?? null,
+      logoFooterUrl: branding.site_logo_footer_url ?? null,
+    },
   });
 });
 

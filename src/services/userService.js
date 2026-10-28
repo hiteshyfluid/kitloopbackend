@@ -56,6 +56,9 @@ async function updateProfile(userId, { displayName, username, avatarUrl, preferr
 
 // ─── getPublicProfile ─────────────────────────────────────────────────────────
 async function getPublicProfile(sellerId) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sellerId)) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
   const user = await prisma.user.findUnique({
     where: { id: sellerId, deletedAt: null },
     select: PUBLIC_USER_SELECT,
