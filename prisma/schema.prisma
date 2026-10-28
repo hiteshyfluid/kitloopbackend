@@ -1,0 +1,840 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ───
+
+enum UserRole {
+  buyer
+  seller
+  both
+  admin
+}
+
+enum AccountStatus {
+  active
+  suspended
+  banned
+  deleted
+}
+
+enum AuthProvider {
+  email
+  google
+  apple
+}
+
+enum TwoFactorMethod {
+  authenticator_app
+  sms
+}
+
+enum SportTag {
+  bat_ball
+  racket
+  team
+  endurance
+  snow
+  water
+  combat
+  precision
+}
+
+enum VisibilityStatus {
+  active
+  hidden
+}
+
+enum ParcelSize {
+  small
+  medium
+  large
+  oversized
+}
+
+enum ItemCondition {
+  new_with_tags
+  like_new
+  good
+  fair
+}
+
+enum ListingStatus {
+  draft
+  live
+  sold
+  paused
+  flagged
+  removed
+}
+
+enum FulfilmentStatus {
+  awaiting_dispatch
+  dispatched
+  delivered
+  completed
+  cancelled
+}
+
+enum OrderPaymentStatus {
+  held
+  released
+  refunded
+  partially_refunded
+}
+
+enum OrderDisputeStatus {
+  none
+  active
+  resolved
+}
+
+enum PaymentMethod {
+  card
+  apple_pay
+  google_pay
+}
+
+enum StripePaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+  partially_refunded
+}
+
+enum EscrowStatus {
+  held
+  released
+  refunded
+  partially_refunded
+}
+
+enum PayoutStatus {
+  pending
+  initiated
+  completed
+  failed
+}
+
+enum OfferThreadStatus {
+  active
+  completed
+  expired
+  closed
+}
+
+enum MessageType {
+  text
+  offer
+  counter_offer
+  system
+}
+
+enum CounterOfferStatus {
+  pending
+  accepted
+  declined
+  expired
+  unavailable
+}
+
+enum DisputeReason {
+  item_not_as_described
+  item_arrived_damaged
+  wrong_item_received
+  item_not_received
+  significantly_different
+}
+
+enum DisputeStatus {
+  open
+  seller_responded
+  admin_reviewing
+  resolved
+  closed
+}
+
+enum DisputeRuling {
+  refund_buyer
+  release_seller
+  partial_resolution
+}
+
+enum NotificationType {
+  order_placed
+  dispatched
+  delivered
+  dispute_raised
+  dispute_resolved
+  offer_received
+  counter_offer_received
+  counter_offer_accepted
+  counter_offer_declined
+  review_received
+  badge_granted
+  badge_revoked
+  listing_flagged
+  listing_removed
+  account_suspended
+  payout_initiated
+  payout_completed
+  price_drop
+}
+
+enum AdminActionType {
+  listing_flagged
+  listing_removed
+  listing_restored
+  user_suspended
+  user_banned
+  user_reinstated
+  dispute_ruled
+  badge_granted
+  badge_revoked
+  fee_updated
+  category_added
+  category_edited
+  category_removed
+  sport_added
+  sport_hidden
+  site_setting_updated
+  listing_featured
+}
+
+enum BadgeAction {
+  granted
+  revoked
+  rejected
+}
+
+enum ShareDestination {
+  whatsapp
+  facebook
+  x
+  imessage
+  email
+  copy_link
+  native_share
+  instagram
+}
+
+enum ShareSurface {
+  listing_detail
+  post_publish
+  my_listings
+}
+
+enum FeeConfigType {
+  percentage
+  flat_amount
+  boolean
+}
+
+// ─── MODELS ───
+
+model User {
+  id                         String        @id @default(uuid()) @db.Uuid
+  email                      String        @unique @db.VarChar(255)
+  username                   String        @unique @db.VarChar(30)
+  displayName                String        @map("display_name") @db.VarChar(60)
+  avatarUrl                  String?       @map("avatar_url")
+  role                       UserRole      @default(buyer)
+  accountStatus              AccountStatus @default(active) @map("account_status")
+  authProvider               AuthProvider  @map("auth_provider")
+  emailVerified              Boolean       @default(false) @map("email_verified")
+  passwordHash               String?       @map("password_hash")
+  twoFactorEnabled           Boolean       @default(false) @map("two_factor_enabled")
+  twoFactorMethod            TwoFactorMethod? @map("two_factor_method")
+  twoFactorSecret            String?       @map("two_factor_secret")
+  twoFactorTempSecret        String?       @map("two_factor_temp_secret")
+  twoFactorPhone             String?       @map("two_factor_phone") @db.VarChar(20)
+  twoFactorPendingPhone      String?       @map("two_factor_pending_phone") @db.VarChar(20)
+  twoFactorPendingCode       String?       @map("two_factor_pending_code")
+  twoFactorPendingCodeExpires DateTime?    @map("two_factor_pending_code_expires")
+  failedLoginAttempts        Int           @default(0) @map("failed_login_attempts")
+  lastFailedLoginAt          DateTime?     @map("last_failed_login_at")
+  lockoutUntil               DateTime?     @map("lockout_until")
+  emailVerificationToken     String?       @map("email_verification_token")
+  emailVerificationExpires   DateTime?     @map("email_verification_expires")
+  passwordResetToken         String?       @map("password_reset_token")
+  passwordResetExpires       DateTime?     @map("password_reset_expires")
+  holidayMode                Boolean       @default(false) @map("holiday_mode")
+  stripeCustomerId           String?       @unique @map("stripe_customer_id") @db.VarChar(255)
+  stripeConnectId            String?       @unique @map("stripe_connect_id") @db.VarChar(255)
+  bankAccountLast4           String?       @map("bank_account_last4") @db.VarChar(4)
+  bankSortCodeMasked         String?       @map("bank_sort_code_masked") @db.VarChar(10)
+  suspensionEndDate          DateTime?     @map("suspension_end_date")
+  suspensionReason           String?       @map("suspension_reason")
+  totalSales                 Int           @default(0) @map("total_sales")
+  averageRating              Decimal?      @map("average_rating") @db.Decimal(3, 2)
+  reviewCount                Int           @default(0) @map("review_count")
+  verifiedSeller             Boolean       @default(false) @map("verified_seller")
+  violationCount             Int           @default(0) @map("violation_count")
+  lastActiveAt               DateTime?     @map("last_active_at")
+  notificationOrderUpdates   Boolean       @default(true) @map("notification_order_updates")
+  notificationMessages       Boolean       @default(true) @map("notification_messages")
+  notificationPriceDrops     Boolean       @default(true) @map("notification_price_drops")
+  notificationPromotions     Boolean       @default(false) @map("notification_promotions")
+  notificationDisputes       Boolean       @default(true) @map("notification_disputes")
+  preferredSports            Json?         @map("preferred_sports")
+  privacyProfilePublic       Boolean       @default(true) @map("privacy_profile_public")
+  privacyDataSharing         Boolean       @default(true) @map("privacy_data_sharing")
+  defaultParcelSize          ParcelSize?   @map("default_parcel_size")
+  createdAt                  DateTime      @default(now()) @map("created_at")
+  updatedAt                  DateTime      @updatedAt @map("updated_at")
+  deletedAt                  DateTime?     @map("deleted_at")
+
+  // Relations
+  listings                   Listing[]
+  ordersBuyer                Order[]          @relation("OrderBuyer")
+  ordersSeller               Order[]          @relation("OrderSeller")
+  paymentsBuyer              Payment[]        @relation("PaymentBuyer")
+  paymentsSeller             Payment[]        @relation("PaymentSeller")
+  offersBuyer                Offer[]          @relation("OfferBuyer")
+  offersSeller               Offer[]          @relation("OfferSeller")
+  messagesSent               Message[]
+  counterOffersSeller        CounterOffer[]   @relation("CounterOfferSeller")
+  counterOffersBuyer         CounterOffer[]   @relation("CounterOfferBuyer")
+  disputesBuyer              Dispute[]        @relation("DisputeBuyer")
+  disputesSeller             Dispute[]        @relation("DisputeSeller")
+  disputesAdmin              Dispute[]        @relation("DisputeAdmin")
+  reviewsGiven               Review[]         @relation("ReviewReviewer")
+  reviewsReceived            Review[]         @relation("ReviewSeller")
+  favourites                 Favourite[]
+  notifications              Notification[]
+  auditLogs                  AuditLog[]
+  sellerBadgesSeller         SellerBadge[]    @relation("BadgeSeller")
+  sellerBadgesAdmin          SellerBadge[]    @relation("BadgeAdmin")
+  shares                     Share[]
+  feeConfigUpdatedBy         FeeConfig[]
+  siteSettingsUpdatedBy      SiteSetting[]
+  sessions                   Session[]
+
+  @@index([accountStatus], map: "idx_users_account_status")
+  @@index([role], map: "idx_users_role")
+  @@index([verifiedSeller], map: "idx_users_verified_seller")
+  @@map("users")
+}
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  userAgent    String?   @map("user_agent")
+  ipAddress    String?   @map("ip_address") @db.VarChar(45)
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  lastUsedAt   DateTime? @map("last_used_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_sessions_user_id")
+  @@index([expiresAt], map: "idx_sessions_expires_at")
+  @@map("sessions")
+}
+
+model Sport {
+  id                       String           @id @default(uuid()) @db.Uuid
+  name                     String           @unique @db.VarChar(50)
+  slug                     String           @unique @db.VarChar(50)
+  iconUrl                  String           @map("icon_url")
+  sportTag                 SportTag         @map("sport_tag")
+  displayOrder             Int              @default(0) @map("display_order")
+  status                   VisibilityStatus @default(active)
+  seasonalHighlight        Boolean          @default(false) @map("seasonal_highlight")
+  seasonalHighlightStart   DateTime?        @map("seasonal_highlight_start")
+  seasonalHighlightEnd     DateTime?        @map("seasonal_highlight_end")
+  listingCount             Int              @default(0) @map("listing_count")
+  createdAt                DateTime         @default(now()) @map("created_at")
+  updatedAt                DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  subCategories            SubCategory[]
+  listings                 Listing[]
+  feeConfigs               FeeConfig[]
+
+  @@index([status], map: "idx_sports_status")
+  @@index([displayOrder], map: "idx_sports_display_order")
+  @@map("sports")
+}
+
+model SubCategory {
+  id                      String           @id @default(uuid()) @db.Uuid
+  sportId                 String           @map("sport_id") @db.Uuid
+  name                    String           @db.VarChar(60)
+  slug                    String           @db.VarChar(60)
+  recommendedParcelSize   ParcelSize       @map("recommended_parcel_size")
+  isOversized             Boolean          @default(false) @map("is_oversized")
+  displayOrder            Int              @default(0) @map("display_order")
+  status                  VisibilityStatus @default(active)
+  listingCount            Int              @default(0) @map("listing_count")
+  createdAt               DateTime         @default(now()) @map("created_at")
+  updatedAt               DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  sport                   Sport            @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  listings                Listing[]
+
+  @@unique([sportId, slug], map: "idx_subcat_sport_slug")
+  @@index([sportId], map: "idx_subcat_sport_id")
+  @@index([status], map: "idx_subcat_status")
+  @@map("sub_categories")
+}
+
+model Brand {
+  id                      String           @id @default(uuid()) @db.Uuid
+  name                    String           @unique @db.VarChar(100)
+  slug                    String           @unique @db.VarChar(100)
+  logoUrl                 String?          @map("logo_url")
+  status                  VisibilityStatus @default(active)
+  displayOrder            Int              @default(0) @map("display_order")
+  createdAt               DateTime         @default(now()) @map("created_at")
+  updatedAt               DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  listings                Listing[]
+
+  @@index([status], map: "idx_brands_status")
+  @@map("brands")
+}
+
+model Listing {
+  id                      String           @id @default(uuid()) @db.Uuid
+  sellerId                String           @map("seller_id") @db.Uuid
+  title                   String           @db.VarChar(80)
+  description             String
+  sportId                 String           @map("sport_id") @db.Uuid
+  subCategoryId           String           @map("sub_category_id") @db.Uuid
+  brandId                 String           @map("brand_id") @db.Uuid
+  condition               ItemCondition
+  colour                  String           @db.VarChar(50)
+  price                   Decimal          @db.Decimal(10, 2)
+  parcelSize              ParcelSize       @map("parcel_size")
+  shippingFee             Decimal          @map("shipping_fee") @db.Decimal(10, 2)
+  status                  ListingStatus    @default(draft)
+  flagReason              String?          @map("flag_reason")
+  removalReason           String?          @map("removal_reason")
+  photos                  Json
+  videoUrl                String?          @map("video_url")
+  viewCount               Int              @default(0) @map("view_count")
+  wishlistCount           Int              @default(0) @map("wishlist_count")
+  shareCount              Int              @default(0) @map("share_count")
+  isFeatured              Boolean          @default(false) @map("is_featured")
+  featuredAt              DateTime?        @map("featured_at")
+  ogImageUrl              String?          @map("og_image_url")
+  publishedAt             DateTime?        @map("published_at")
+  soldAt                  DateTime?        @map("sold_at")
+  createdAt               DateTime         @default(now()) @map("created_at")
+  updatedAt               DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  seller                  User             @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  sport                   Sport            @relation(fields: [sportId], references: [id], onDelete: Restrict)
+  subCategory             SubCategory      @relation(fields: [subCategoryId], references: [id], onDelete: Restrict)
+  brand                   Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  orders                  Order[]
+  offers                  Offer[]
+  counterOffers           CounterOffer[]
+  favourites              Favourite[]
+  shares                  Share[]
+
+  @@index([sellerId], map: "idx_listings_seller_id")
+  @@index([sportId], map: "idx_listings_sport_id")
+  @@index([subCategoryId], map: "idx_listings_subcat_id")
+  @@index([brandId], map: "idx_listings_brand_id")
+  @@index([status], map: "idx_listings_status")
+  @@index([condition], map: "idx_listings_condition")
+  @@index([price], map: "idx_listings_price")
+  @@index([colour], map: "idx_listings_colour")
+  @@index([isFeatured], map: "idx_listings_featured")
+  @@index([publishedAt(sort: Desc)], map: "idx_listings_published_at")
+  @@map("listings")
+}
+
+model Order {
+  id                       String              @id @default(uuid()) @db.Uuid
+  listingId                String              @map("listing_id") @db.Uuid
+  buyerId                  String              @map("buyer_id") @db.Uuid
+  sellerId                 String              @map("seller_id") @db.Uuid
+  itemPrice                Decimal             @map("item_price") @db.Decimal(10, 2)
+  shippingFee              Decimal             @map("shipping_fee") @db.Decimal(10, 2)
+  buyerProtectionFee       Decimal             @map("buyer_protection_fee") @db.Decimal(10, 2)
+  platformCommission       Decimal             @map("platform_commission") @db.Decimal(10, 2)
+  totalAmount              Decimal             @map("total_amount") @db.Decimal(10, 2)
+  sellerNetAmount          Decimal             @map("seller_net_amount") @db.Decimal(10, 2)
+  fulfilmentStatus         FulfilmentStatus    @default(awaiting_dispatch) @map("fulfilment_status")
+  paymentStatus            OrderPaymentStatus  @default(held) @map("payment_status")
+  disputeStatus            OrderDisputeStatus  @default(none) @map("dispute_status")
+  trackingNumber           String?             @map("tracking_number") @db.VarChar(100)
+  dispatchedAt             DateTime?           @map("dispatched_at")
+  deliveredAt              DateTime?           @map("delivered_at")
+  completedAt              DateTime?           @map("completed_at")
+  deliveryAddressLine1     String              @map("delivery_address_line1") @db.VarChar(100)
+  deliveryAddressLine2     String?             @map("delivery_address_line2") @db.VarChar(100)
+  deliveryCity             String              @map("delivery_city") @db.VarChar(60)
+  deliveryPostcode         String              @map("delivery_postcode") @db.VarChar(10)
+  agreedPrice              Decimal?            @map("agreed_price") @db.Decimal(10, 2)
+  snapshotListingTitle     String              @map("snapshot_listing_title") @db.VarChar(80)
+  snapshotCondition        String              @map("snapshot_condition") @db.VarChar(20)
+  snapshotPhotos           Json                @map("snapshot_photos")
+  disputeWindowExpiresAt   DateTime?           @map("dispute_window_expires_at")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  listing                  Listing             @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  buyer                    User                @relation("OrderBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller                   User                @relation("OrderSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  payment                  Payment?
+  dispute                  Dispute?
+  review                   Review?
+
+  @@index([listingId], map: "idx_orders_listing_id")
+  @@index([buyerId], map: "idx_orders_buyer_id")
+  @@index([sellerId], map: "idx_orders_seller_id")
+  @@index([fulfilmentStatus], map: "idx_orders_fulfilment_status")
+  @@index([paymentStatus], map: "idx_orders_payment_status")
+  @@index([disputeStatus], map: "idx_orders_dispute_status")
+  @@index([createdAt(sort: Desc)], map: "idx_orders_created_at")
+  @@map("orders")
+}
+
+model Payment {
+  id                       String              @id @default(uuid()) @db.Uuid
+  orderId                  String              @unique @map("order_id") @db.Uuid
+  buyerId                  String              @map("buyer_id") @db.Uuid
+  sellerId                 String              @map("seller_id") @db.Uuid
+  stripePaymentIntentId    String              @unique @map("stripe_payment_intent_id") @db.VarChar(255)
+  stripeChargeId           String?             @unique @map("stripe_charge_id") @db.VarChar(255)
+  stripeTransferId         String?             @unique @map("stripe_transfer_id") @db.VarChar(255)
+  stripeRefundId           String?             @map("stripe_refund_id") @db.VarChar(255)
+  amountTotal              Decimal             @map("amount_total") @db.Decimal(10, 2)
+  amountItem               Decimal             @map("amount_item") @db.Decimal(10, 2)
+  amountShipping           Decimal             @map("amount_shipping") @db.Decimal(10, 2)
+  amountBuyerProtection    Decimal             @map("amount_buyer_protection") @db.Decimal(10, 2)
+  amountCommission         Decimal             @map("amount_commission") @db.Decimal(10, 2)
+  amountSellerPayout       Decimal             @map("amount_seller_payout") @db.Decimal(10, 2)
+  amountRefunded           Decimal             @default(0) @map("amount_refunded") @db.Decimal(10, 2)
+  currency                 String              @default("GBP") @db.VarChar(3)
+  paymentMethod            PaymentMethod       @map("payment_method")
+  paymentStatus            StripePaymentStatus @map("payment_status")
+  escrowStatus             EscrowStatus        @default(held) @map("escrow_status")
+  payoutStatus             PayoutStatus?       @map("payout_status")
+  payoutInitiatedAt        DateTime?           @map("payout_initiated_at")
+  payoutCompletedAt        DateTime?           @map("payout_completed_at")
+  refundReason             String?             @map("refund_reason")
+  shippingFeeRefunded      Boolean             @default(false) @map("shipping_fee_refunded")
+  stripeWebhookEvents      Json?               @map("stripe_webhook_events")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  order                    Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  buyer                    User                @relation("PaymentBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller                   User                @relation("PaymentSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@index([buyerId], map: "idx_payments_buyer_id")
+  @@index([sellerId], map: "idx_payments_seller_id")
+  @@index([paymentStatus], map: "idx_payments_payment_status")
+  @@index([escrowStatus], map: "idx_payments_escrow_status")
+  @@index([payoutStatus], map: "idx_payments_payout_status")
+  @@map("payments")
+}
+
+model Offer {
+  id                       String            @id @default(uuid()) @db.Uuid
+  listingId                String            @map("listing_id") @db.Uuid
+  buyerId                  String            @map("buyer_id") @db.Uuid
+  sellerId                 String            @map("seller_id") @db.Uuid
+  status                   OfferThreadStatus @default(active)
+  lastMessageAt            DateTime?         @map("last_message_at")
+  lastMessagePreview       String?           @map("last_message_preview") @db.VarChar(60)
+  buyerUnreadCount         Int               @default(0) @map("buyer_unread_count")
+  sellerUnreadCount        Int               @default(0) @map("seller_unread_count")
+  createdAt                DateTime          @default(now()) @map("created_at")
+  updatedAt                DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  listing                  Listing           @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  buyer                    User              @relation("OfferBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller                   User              @relation("OfferSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  messages                 Message[]
+  counterOffers            CounterOffer[]
+
+  @@unique([listingId, buyerId], map: "idx_offers_listing_buyer")
+  @@index([listingId], map: "idx_offers_listing_id")
+  @@index([buyerId], map: "idx_offers_buyer_id")
+  @@index([sellerId], map: "idx_offers_seller_id")
+  @@index([status], map: "idx_offers_status")
+  @@index([lastMessageAt(sort: Desc)], map: "idx_offers_last_message_at")
+  @@map("offers")
+}
+
+model Message {
+  id                       String        @id @default(uuid()) @db.Uuid
+  offerId                  String        @map("offer_id") @db.Uuid
+  senderId                 String        @map("sender_id") @db.Uuid
+  messageType              MessageType   @default(text) @map("message_type")
+  body                     String?
+  offerAmount              Decimal?      @map("offer_amount") @db.Decimal(10, 2)
+  isRead                   Boolean       @default(false) @map("is_read")
+  isBlocked                Boolean       @default(false) @map("is_blocked")
+  blockReason              String?       @map("block_reason")
+  createdAt                DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  offer                    Offer         @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  sender                   User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  counterOffer             CounterOffer?
+
+  @@index([offerId], map: "idx_messages_offer_id")
+  @@index([senderId], map: "idx_messages_sender_id")
+  @@index([createdAt], map: "idx_messages_created_at")
+  @@index([isRead], map: "idx_messages_is_read")
+  @@map("messages")
+}
+
+model CounterOffer {
+  id                            String             @id @default(uuid()) @db.Uuid
+  offerId                       String             @map("offer_id") @db.Uuid
+  messageId                     String             @unique @map("message_id") @db.Uuid
+  sellerId                      String             @map("seller_id") @db.Uuid
+  buyerId                       String             @map("buyer_id") @db.Uuid
+  listingId                     String             @map("listing_id") @db.Uuid
+  counterAmount                 Decimal            @map("counter_amount") @db.Decimal(10, 2)
+  originalPrice                 Decimal            @map("original_price") @db.Decimal(10, 2)
+  status                        CounterOfferStatus @default(pending)
+  expiresAt                     DateTime           @map("expires_at")
+  acceptedAt                    DateTime?          @map("accepted_at")
+  declinedAt                    DateTime?          @map("declined_at")
+  checkoutPriceLockExpiresAt    DateTime?          @map("checkout_price_lock_expires_at")
+  createdAt                     DateTime           @default(now()) @map("created_at")
+  updatedAt                     DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  offer                         Offer              @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  message                       Message            @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  seller                        User               @relation("CounterOfferSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer                         User               @relation("CounterOfferBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  listing                       Listing            @relation(fields: [listingId], references: [id], onDelete: Restrict)
+
+  @@index([offerId], map: "idx_counter_offers_offer_id")
+  @@index([listingId], map: "idx_counter_offers_listing_id")
+  @@index([status], map: "idx_counter_offers_status")
+  @@index([expiresAt], map: "idx_counter_offers_expires_at")
+  @@index([checkoutPriceLockExpiresAt], map: "idx_counter_offers_checkout_lock")
+  @@map("counter_offers")
+}
+
+model Dispute {
+  id                            String         @id @default(uuid()) @db.Uuid
+  orderId                       String         @unique @map("order_id") @db.Uuid
+  buyerId                       String         @map("buyer_id") @db.Uuid
+  sellerId                      String         @map("seller_id") @db.Uuid
+  reason                        DisputeReason
+  description                   String
+  evidencePhotos                Json?          @map("evidence_photos")
+  sellerResponse                String?        @map("seller_response")
+  sellerEvidencePhotos          Json?          @map("seller_evidence_photos")
+  sellerRespondedAt             DateTime?      @map("seller_responded_at")
+  sellerResponseDeadline        DateTime       @map("seller_response_deadline")
+  status                        DisputeStatus  @default(open)
+  adminId                       String?        @map("admin_id") @db.Uuid
+  ruling                        DisputeRuling?
+  rulingReason                  String?        @map("ruling_reason")
+  refundAmount                  Decimal?       @map("refund_amount") @db.Decimal(10, 2)
+  sellerReleaseAmount           Decimal?       @map("seller_release_amount") @db.Decimal(10, 2)
+  shippingFeeRefunded           Boolean        @default(false) @map("shipping_fee_refunded")
+  additionalEvidenceRequested   Boolean        @default(false) @map("additional_evidence_requested")
+  additionalEvidenceDeadline    DateTime?      @map("additional_evidence_deadline")
+  resolvedAt                    DateTime?      @map("resolved_at")
+  createdAt                     DateTime       @default(now()) @map("created_at")
+  updatedAt                     DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  order                         Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  buyer                         User           @relation("DisputeBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller                        User           @relation("DisputeSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  admin                         User?          @relation("DisputeAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([buyerId], map: "idx_disputes_buyer_id")
+  @@index([sellerId], map: "idx_disputes_seller_id")
+  @@index([status], map: "idx_disputes_status")
+  @@index([adminId], map: "idx_disputes_admin_id")
+  @@index([createdAt(sort: Desc)], map: "idx_disputes_created_at")
+  @@map("disputes")
+}
+
+model Review {
+  id                       String    @id @default(uuid()) @db.Uuid
+  orderId                  String    @unique @map("order_id") @db.Uuid
+  reviewerId               String    @map("reviewer_id") @db.Uuid
+  sellerId                 String    @map("seller_id") @db.Uuid
+  rating                   Int
+  body                     String?
+  isVisible                Boolean   @default(true) @map("is_visible")
+  removedByAdmin           Boolean   @default(false) @map("removed_by_admin")
+  removalReason            String?   @map("removal_reason")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  order                    Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reviewer                 User      @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+  seller                   User      @relation("ReviewSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId], map: "idx_reviews_seller_id")
+  @@index([reviewerId], map: "idx_reviews_reviewer_id")
+  @@index([rating], map: "idx_reviews_rating")
+  @@index([isVisible], map: "idx_reviews_is_visible")
+  @@index([createdAt(sort: Desc)], map: "idx_reviews_created_at")
+  @@map("reviews")
+}
+
+model Favourite {
+  id                       String    @id @default(uuid()) @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+  listingId                String    @map("listing_id") @db.Uuid
+  createdAt                DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing                  Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId], map: "idx_favourites_user_listing")
+  @@index([userId], map: "idx_favourites_user_id")
+  @@index([listingId], map: "idx_favourites_listing_id")
+  @@index([createdAt(sort: Desc)], map: "idx_favourites_created_at")
+  @@map("favourites")
+}
+
+model Notification {
+  id                       String           @id @default(uuid()) @db.Uuid
+  userId                   String           @map("user_id") @db.Uuid
+  type                     NotificationType
+  title                    String           @db.VarChar(100)
+  body                     String
+  referenceId              String?          @map("reference_id") @db.Uuid
+  referenceType            String?          @map("reference_type") @db.VarChar(50)
+  isRead                   Boolean          @default(false) @map("is_read")
+  sentInApp                Boolean          @default(false) @map("sent_in_app")
+  sentEmail                Boolean          @default(false) @map("sent_email")
+  createdAt                DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user                     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_notifications_user_id")
+  @@index([type], map: "idx_notifications_type")
+  @@index([isRead], map: "idx_notifications_is_read")
+  @@index([createdAt(sort: Desc)], map: "idx_notifications_created_at")
+  @@map("notifications")
+}
+
+model AuditLog {
+  id                       String          @id @default(uuid()) @db.Uuid
+  adminId                  String          @map("admin_id") @db.Uuid
+  actionType               AdminActionType @map("action_type")
+  targetType               String          @map("target_type") @db.VarChar(50)
+  targetId                 String          @map("target_id") @db.Uuid
+  previousValue            Json?           @map("previous_value")
+  newValue                 Json?           @map("new_value")
+  reason                   String?
+  internalNote             String?         @map("internal_note")
+  createdAt                DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  admin                    User            @relation(fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([adminId], map: "idx_audit_log_admin_id")
+  @@index([actionType], map: "idx_audit_log_action_type")
+  @@index([targetType], map: "idx_audit_log_target_type")
+  @@index([targetId], map: "idx_audit_log_target_id")
+  @@index([createdAt(sort: Desc)], map: "idx_audit_log_created_at")
+  @@map("audit_log")
+}
+
+model SellerBadge {
+  id                          String       @id @default(uuid()) @db.Uuid
+  sellerId                    String       @map("seller_id") @db.Uuid
+  adminId                     String?      @map("admin_id") @db.Uuid
+  action                      BadgeAction
+  reason                      String?
+  unmetCriteria               Json?        @map("unmet_criteria")
+  reapplicationEligibleAt     DateTime?    @map("reapplication_eligible_at")
+  createdAt                   DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  seller                      User         @relation("BadgeSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  admin                       User?        @relation("BadgeAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([sellerId], map: "idx_seller_badges_seller_id")
+  @@index([action], map: "idx_seller_badges_action")
+  @@index([reapplicationEligibleAt], map: "idx_seller_badges_reapply_at")
+  @@map("seller_badges")
+}
+
+model Share {
+  id                       String           @id @default(uuid()) @db.Uuid
+  listingId                String           @map("listing_id") @db.Uuid
+  userId                   String?          @map("user_id") @db.Uuid
+  destination              ShareDestination
+  surface                  ShareSurface
+  createdAt                DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  listing                  Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user                     User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([listingId], map: "idx_shares_listing_id")
+  @@index([userId], map: "idx_shares_user_id")
+  @@index([destination], map: "idx_shares_destination")
+  @@index([createdAt(sort: Desc)], map: "idx_shares_created_at")
+  @@map("shares")
+}
+
+model FeeConfig {
+  id                       String        @id @default(uuid()) @db.Uuid
+  configKey                String        @unique @map("config_key") @db.VarChar(100)
+  configValue              Decimal       @map("config_value") @db.Decimal(10, 4)
+  configType               FeeConfigType @map("config_type")
+  description              String
+  sportId                  String?       @map("sport_id") @db.Uuid
+  isPromotional            Boolean       @default(false) @map("is_promotional")
+  promotionalStart         DateTime?     @map("promotional_start")
+  promotionalEnd           DateTime?     @map("promotional_end")
+  previousValue            Decimal?      @map("previous_value") @db.Decimal(10, 4)
+  updatedBy                String?       @map("updated_by") @db.Uuid
+  createdAt                DateTime      @default(now()) @map("created_at")
+  updatedAt                DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  sport                    Sport?        @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  updatedByUser            User?         @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([sportId], map: "idx_fee_config_sport_id")
+  @@index([isPromotional], map: "idx_fee_config_promotional")
+  @@index([promotionalEnd], map: "idx_fee_config_promo_end")
+  @@map("fee_config")
+}
+
+model SiteSetting {
+  id           String    @id @default(uuid()) @db.Uuid
+  settingKey   String    @unique @map("setting_key") @db.VarChar(100)
+  settingValue String?   @map("setting_value")
+  updatedBy    String?   @map("updated_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  updatedByUser User?    @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@map("site_settings")
+}

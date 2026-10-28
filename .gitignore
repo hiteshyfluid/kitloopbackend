@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+*.log
+/src/generated/prisma
+.claude/settings.local.json
+.env
+.env.*
