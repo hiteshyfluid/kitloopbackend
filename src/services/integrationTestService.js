@@ -26,6 +26,12 @@ async function testStripe(settings) {
   }
   if (!config.publishable_key) warnings.push('Publishable key is not set — checkout cannot load Stripe.js.');
   if (!secrets.webhook_secret) warnings.push('Webhook signing secret is not set — payment confirmations will not be received.');
+  // pk_/sk_ keys from the same account share the segment after the mode prefix.
+  // A mismatch makes Stripe.js fail with "No such payment_intent" at checkout.
+  const accountSegment = (key) => key.replace(/^(pk|sk|rk)_(test|live)_/, '').slice(0, 10);
+  if (config.publishable_key && accountSegment(config.publishable_key) !== accountSegment(secrets.secret_key)) {
+    warnings.push('Publishable key and secret key look like they belong to different Stripe accounts — checkout will fail with "No such payment_intent".');
+  }
 
   try {
     const client = createStripeClient(secrets.secret_key, { timeout: 10_000, maxNetworkRetries: 0 });

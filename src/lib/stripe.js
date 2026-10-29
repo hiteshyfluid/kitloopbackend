@@ -31,6 +31,10 @@ async function activeStripeSettings() {
 async function getStripeClient() {
   const active = await activeStripeSettings();
   const secretKey = active?.secrets?.secret_key || process.env.STRIPE_SECRET_KEY;
+  if (active && !active.secrets?.secret_key && secretKey) {
+    // The frontend gets the DB publishable key, so this pairing is likely a different account.
+    console.warn(`[stripe] active ${active.environment} settings have no usable secret key (missing, or SETTINGS_ENCRYPTION_KEY changed) — falling back to STRIPE_SECRET_KEY from .env`);
+  }
   if (!secretKey) {
     throw new AppError('Payments are not configured yet. A super admin needs to add the Stripe keys in Admin → Payment settings.', 503, 'STRIPE_NOT_CONFIGURED');
   }
