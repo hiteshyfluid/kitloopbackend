@@ -2,7 +2,7 @@ const referenceDataService = require('../services/referenceDataService');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { sendSuccess } = require('../utils/response');
-const { sportIdParamSchema } = require('../validators/referenceDataValidators');
+const { sportIdParamSchema, subCategoryParamSchema } = require('../validators/referenceDataValidators');
 
 function validate(schema, data) {
   const result = schema.safeParse(data);
@@ -25,4 +25,11 @@ const getSubCategories = catchAsync(async (req, res) => {
   sendSuccess(res, 200, { subCategories });
 });
 
-module.exports = { getSports, getSubCategories };
+// GET /sports/:sport_id/sub-categories/:sub_category_id/variant-options
+const getVariantOptions = catchAsync(async (req, res) => {
+  const { sport_id: sportId, sub_category_id: subCategoryId } = validate(subCategoryParamSchema, req.params);
+  const dimensions = await referenceDataService.listVariantOptionsForSubCategory(sportId, subCategoryId);
+  sendSuccess(res, 200, { dimensions });
+});
+
+module.exports = { getSports, getSubCategories, getVariantOptions };

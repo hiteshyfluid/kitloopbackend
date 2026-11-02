@@ -64,6 +64,7 @@ const createListing = catchAsync(async (req, res) => {
     parcelSize: body.parcel_size,
     photos: photoUrls,
     videoUrl,
+    variantOptionIds: body.variant_option_ids,
   });
 
   sendSuccess(res, 201, { listing });
@@ -112,7 +113,9 @@ const updateListing = catchAsync(async (req, res) => {
   if (body.sport_id !== undefined) updateData.sportId = body.sport_id;
   if (body.sub_category_id !== undefined) updateData.subCategoryId = body.sub_category_id;
   if (body.brand_id !== undefined) updateData.brandId = body.brand_id;
+  if (body.variant_option_ids !== undefined) updateData.variantOptionIds = body.variant_option_ids;
   delete updateData.parcel_size;
+  delete updateData.variant_option_ids;
   delete updateData.video_url;
   delete updateData.photo_urls;
   delete updateData.sport_id;

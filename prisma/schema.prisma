@@ -70,6 +70,11 @@ enum ParcelSize {
   oversized
 }
 
+enum Handedness {
+  left
+  right
+}
+
 enum ItemCondition {
   new_with_tags
   like_new
@@ -399,6 +404,7 @@ model SubCategory {
   // Relations
   sport                   Sport            @relation(fields: [sportId], references: [id], onDelete: Restrict)
   listings                Listing[]
+  variantOptions          VariantOption[]
 
   @@unique([sportId, slug], map: "idx_subcat_sport_slug")
   @@index([sportId], map: "idx_subcat_sport_id")
@@ -463,6 +469,7 @@ model Listing {
   favourites              Favourite[]
   cartItems               CartItem[]
   shares                  Share[]
+  variants                ListingVariant[]
 
   @@index([sellerId], map: "idx_listings_seller_id")
   @@index([sportId], map: "idx_listings_sport_id")
@@ -475,6 +482,54 @@ model Listing {
   @@index([isFeatured], map: "idx_listings_featured")
   @@index([publishedAt(sort: Desc)], map: "idx_listings_published_at")
   @@map("listings")
+}
+
+// Selectable SKU options per sub-category (e.g. Cricket bat → Size: SH / LH,
+// Batting gloves → Size + Hand: Adult LH — Medium). Seeded from
+// prisma/seed-data/product-variants.csv. Shipping box / weight are reference
+// data only — the seller still confirms the parcel size on the listing.
+model VariantOption {
+  id                      String           @id @default(uuid()) @db.Uuid
+  subCategoryId           String           @map("sub_category_id") @db.Uuid
+  dimension               String           @db.VarChar(40)
+  value                   String           @db.VarChar(100)
+  notes                   String?          @db.VarChar(255)
+  handedness              Handedness?
+  gender                  String?          @db.VarChar(30)
+  ageGroup                String?          @map("age_group") @db.VarChar(30)
+  surface                 String?          @db.VarChar(60)
+  shippingBoxCm           String?          @map("shipping_box_cm") @db.VarChar(60)
+  estWeight               String?          @map("est_weight") @db.VarChar(60)
+  displayOrder            Int              @default(0) @map("display_order")
+  status                  VisibilityStatus @default(active)
+  createdAt               DateTime         @default(now()) @map("created_at")
+  updatedAt               DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  subCategory             SubCategory      @relation(fields: [subCategoryId], references: [id], onDelete: Cascade)
+  listingVariants         ListingVariant[]
+
+  @@unique([subCategoryId, dimension, value], map: "idx_variant_options_subcat_dim_value")
+  @@index([subCategoryId], map: "idx_variant_options_subcat_id")
+  @@index([handedness], map: "idx_variant_options_handedness")
+  @@map("variant_options")
+}
+
+// The option a listing was created with — at most one per dimension.
+model ListingVariant {
+  id                      String           @id @default(uuid()) @db.Uuid
+  listingId               String           @map("listing_id") @db.Uuid
+  variantOptionId         String           @map("variant_option_id") @db.Uuid
+  dimension               String           @db.VarChar(40)
+  createdAt               DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  listing                 Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  variantOption           VariantOption    @relation(fields: [variantOptionId], references: [id], onDelete: Restrict)
+
+  @@unique([listingId, dimension], map: "idx_listing_variants_listing_dim")
+  @@index([variantOptionId], map: "idx_listing_variants_option_id")
+  @@map("listing_variants")
 }
 
 model Order {

@@ -524,6 +524,7 @@ Creates a new listing in draft status. Called as the seller fills out the sell f
   "colour": "Brown",
   "price": 89.00,
   "parcel_size": "large",
+  "variant_option_ids": ["option-uuid-size-sh", "option-uuid-grade-1"],
   "photos": [
     "https://cloudinary.com/.../photo1.jpg",
     "https://cloudinary.com/.../photo2.jpg"
@@ -541,6 +542,7 @@ Creates a new listing in draft status. Called as the seller fills out the sell f
 * `colour` — required  
 * `price` — required, £1.00–£9,999.00  
 * `parcel_size` — required, one of: `small`, `medium`, `large`, `oversized`  
+* `variant_option_ids` — optional, array of option ids from [List Variant Options](#10a-list-variant-options-for-a-sub-category) (multipart: JSON string or repeated field). Each must belong to `sub_category_id`, max one per dimension (e.g. one Size, one Willow Grade). Options do not affect `shipping_fee` — that still comes from `parcel_size`  
 * `photos` — required, minimum 1, maximum 10
 
 **Success response — 201 Created:**
@@ -566,6 +568,8 @@ Creates a new listing in draft status. Called as the seller fills out the sell f
 | 400 | `VALIDATION_ERROR` | Returns field-by-field errors, e.g. `{"errors": {"title": "Title must be at least 5 characters"}}` |
 | 400 | `MISSING_PHOTOS` | "Please add at least one photo before publishing" |
 | 404 | `INVALID_CATEGORY` | sport\_id/sub\_category\_id doesn't exist or isn't active |
+| 400 | `INVALID_VARIANT_OPTION` | A `variant_option_ids` entry doesn't belong to the sub-category or isn't active |
+| 400 | `DUPLICATE_VARIANT_DIMENSION` | Two options for the same dimension (e.g. two Sizes) |
 | 401 | `UNAUTHORIZED` | Not logged in |
 
 ---
@@ -633,6 +637,12 @@ Public endpoint — the listing detail page. Increments `view_count` on each cal
     "sport": { "id": "sport-uuid", "name": "Cricket", "slug": "cricket" },
     "sub_category": { "id": "subcat-uuid", "name": "Cricket bat" },
     "brand": { "id": "brand-uuid", "name": "Gray-Nicolls" },
+    "variants": [
+      {
+        "dimension": "Size",
+        "variant_option": { "id": "option-uuid", "value": "Short Handle (SH)", "notes": "Adult standard — most common adult size", "handedness": null, "gender": "Unisex", "age_group": "Adult" }
+      }
+    ],
     "seller": {
       "id": "user-uuid",
       "username": "jameswilson",
@@ -677,6 +687,8 @@ Public endpoint — the listing detail page. Increments `view_count` on each cal
 **Auth required:** Yes (must be the listing's seller)
 
 **Request body:** same shape as Create, any subset of editable fields
+
+`variant_option_ids` replaces the listing's options when sent (`[]` or `""` clears them). If `sub_category_id` changes and `variant_option_ids` is not sent, the old options are cleared, since they belong to the previous sub-category.
 
 **Success response — 200 OK:**
 
@@ -774,6 +786,8 @@ The single endpoint powering homepage Featured Listings, sport-filtered browse, 
 | `colour` | `black,brown` | Comma-separated, OR logic |
 | `price_min` | `0` | — |
 | `price_max` | `150` | — |
+| `hand` | `left` | `left` or `right` — listings with a left/right-handed option |
+| `variant_option` | `uuid1,uuid2` | Option ids. Same dimension = OR (SH or LH), different dimensions = AND (SH and Grade 1) |
 | `sort` | `newest` | One of: `newest`, `oldest`, `price_asc`, `price_desc` (default: `newest`) |
 | `featured` | `true` | Only featured listings (homepage use) |
 | `page` | `1` | Default 1 |
@@ -805,6 +819,8 @@ The single endpoint powering homepage Featured Listings, sport-filtered browse, 
   }
 }
 ```
+
+Listing cards also include `variants` (`dimension` + `variant_option { id, value, handedness }`). When `sub_category` is set, `available_filters.variant_dimensions` lists the options used by matching listings, grouped by dimension (same shape as endpoint 10a); otherwise it is empty.
 
 **Note on `available_filters`:** per the SRS, the Brand and Colour filters only show options present in the *current* result set, not the whole platform. This block tells the frontend exactly what to render in the filter sidebar based on the current query — it recalculates on every search call.
 
@@ -892,13 +908,57 @@ These power dropdowns in the sell form and filter sidebar. All public, all cache
       "name": "Cricket bat",
       "slug": "cricket-bat",
       "recommended_parcel_size": "large",
-      "is_oversized": false
+      "is_oversized": false,
+      "has_variant_options": true
     }
   ]
 }
 ```
 
 This is the exact endpoint that powers the parcel-size auto-recommendation from the Choose Parcel Size SRS — the frontend calls this when a sport is selected, gets the sub-category list with `recommended_parcel_size` already attached, and uses it to pre-populate and grey out options the moment the seller picks a sub-category.
+
+`has_variant_options` tells the sell form whether to call endpoint 10a for this sub-category.
+
+---
+
+### **10a. List Variant Options for a Sub-Category**
+
+**`GET /sports/:sport_id/sub-categories/:sub_category_id/variant-options`**
+
+Powers the product-specific option dropdowns on the sell form — e.g. Cricket bat shows **Size** (Size 1–6, Harrow, SH, LH, LB) and **Willow Grade**; Batting gloves show **Size + Hand** (Adult RH — Medium, Adult LH — Medium, …). Render one dropdown per dimension. Seeded from `prisma/seed-data/product-variants.csv`.
+
+**Auth required:** No
+
+**Success response — 200 OK:**
+
+```json
+{
+  "success": true,
+  "dimensions": [
+    {
+      "name": "Size",
+      "options": [
+        { "id": "option-uuid", "value": "Short Handle (SH)", "notes": "Adult standard — most common adult size", "handedness": null, "gender": "Unisex", "age_group": "Adult" }
+      ]
+    },
+    {
+      "name": "Willow Grade",
+      "options": [
+        { "id": "option-uuid", "value": "Grade 1", "notes": "Match-quality English willow; minor cosmetic marks", "handedness": null, "gender": "Unisex", "age_group": "Adult" }
+      ]
+    }
+  ]
+}
+```
+
+`dimensions` is empty when the sub-category has no options. `handedness` is `left`, `right` or `null`.
+
+**Error responses:**
+
+| Status | Code | When |
+| ----- | ----- | ----- |
+| 400 | `VALIDATION_ERROR` | Invalid id format |
+| 404 | `SUB_CATEGORY_NOT_FOUND` | Sub-category doesn't exist, isn't active, or isn't under this sport |
 
 ---
 

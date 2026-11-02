@@ -7,6 +7,21 @@ const VALID_PARCEL_SIZES = ['small', 'medium', 'large', 'oversized'];
 const VALID_SORT = ['newest', 'oldest', 'price_asc', 'price_desc'];
 const VALID_DESTINATIONS = ['whatsapp', 'facebook', 'x', 'imessage', 'email', 'copy_link', 'native_share', 'instagram'];
 const VALID_SURFACES = ['listing_detail', 'post_publish', 'my_listings'];
+const VALID_HANDEDNESS = ['left', 'right'];
+
+// Multipart forms send arrays as a JSON string or a single value — normalise to an array.
+const variantOptionIds = z.preprocess((v) => {
+  if (v === undefined || v === null) return undefined;
+  if (v === '') return []; // explicit "clear all options" on update
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed : [v];
+    } catch { return [v]; }
+  }
+  return v;
+}, z.array(UUID).max(10, 'Too many variant options'));
 
 const createListingSchema = z.object({
   title: z.string().trim().min(5, 'Title must be at least 5 characters').max(80, 'Title must be under 80 characters'),
@@ -18,6 +33,7 @@ const createListingSchema = z.object({
   colour: z.string().trim().min(1, 'Colour is required').max(50, 'Colour must be under 50 characters'),
   price: z.coerce.number({ invalid_type_error: 'Price must be a number' }).min(1, 'Price must be at least £1.00').max(9999, 'Price must be under £9,999.00'),
   parcel_size: z.string().refine((v) => VALID_PARCEL_SIZES.includes(v), { message: `Parcel size must be one of: ${VALID_PARCEL_SIZES.join(', ')}` }),
+  variant_option_ids: variantOptionIds.optional(),
 });
 
 const updateListingSchema = z.object({
@@ -32,6 +48,7 @@ const updateListingSchema = z.object({
   sport_id: UUID.optional(),
   sub_category_id: UUID.optional(),
   brand_id: UUID.optional(),
+  variant_option_ids: variantOptionIds.optional(),
 });
 
 const searchSchema = z.object({
@@ -44,6 +61,8 @@ const searchSchema = z.object({
   colour: z.string().trim().optional(),
   price_min: z.coerce.number().min(0).optional(),
   price_max: z.coerce.number().min(0).optional(),
+  hand: z.string().refine((v) => VALID_HANDEDNESS.includes(v), { message: `Hand must be one of: ${VALID_HANDEDNESS.join(', ')}` }).optional(),
+  variant_option: z.string().trim().optional(),
   sort: z.string().refine((v) => VALID_SORT.includes(v), { message: `Sort must be one of: ${VALID_SORT.join(', ')}` }).default('newest'),
   featured: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),

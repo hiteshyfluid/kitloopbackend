@@ -25,6 +25,7 @@ async function listSubCategoriesForSport(sportId) {
   const subCategories = await prisma.subCategory.findMany({
     where: { sportId, status: 'active' },
     orderBy: { displayOrder: 'asc' },
+    include: { _count: { select: { variantOptions: { where: { status: 'active' } } } } },
   });
 
   return subCategories.map((subCategory) => ({
@@ -33,7 +34,43 @@ async function listSubCategoriesForSport(sportId) {
     slug: subCategory.slug,
     recommendedParcelSize: subCategory.recommendedParcelSize,
     isOversized: subCategory.isOversized,
+    hasVariantOptions: subCategory._count.variantOptions > 0,
   }));
+}
+
+// Variant options grouped by dimension, e.g. Cricket bat →
+// [{ name: 'Size', options: [...] }, { name: 'Willow Grade', options: [...] }].
+// An empty list means the sub-category has no options to pick.
+async function listVariantOptionsForSubCategory(sportId, subCategoryId) {
+  const subCategory = await prisma.subCategory.findFirst({
+    where: { id: subCategoryId, sportId, status: 'active' },
+    select: { id: true },
+  });
+  if (!subCategory) {
+    throw new AppError('Sub-category not found', 404, 'SUB_CATEGORY_NOT_FOUND');
+  }
+
+  const options = await prisma.variantOption.findMany({
+    where: { subCategoryId, status: 'active' },
+    orderBy: { displayOrder: 'asc' },
+    select: {
+      id: true,
+      dimension: true,
+      value: true,
+      notes: true,
+      handedness: true,
+      gender: true,
+      ageGroup: true,
+    },
+  });
+
+  const dimensions = new Map();
+  for (const { dimension, ...option } of options) {
+    if (!dimensions.has(dimension)) dimensions.set(dimension, []);
+    dimensions.get(dimension).push(option);
+  }
+
+  return [...dimensions].map(([name, opts]) => ({ name, options: opts }));
 }
 
 async function listBrands(search) {
@@ -53,4 +90,4 @@ async function listBrands(search) {
   }));
 }
 
-module.exports = { listSports, listSubCategoriesForSport, listBrands };
+module.exports = { listSports, listSubCategoriesForSport, listVariantOptionsForSubCategory, listBrands };

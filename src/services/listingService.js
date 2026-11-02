@@ -25,6 +25,40 @@ async function getShippingFee(parcelSize) {
   return config ? Number(config.configValue) : (SHIPPING_FEE_DEFAULTS[parcelSize] ?? 0);
 }
 
+// ─── Variant options ──────────────────────────────────────────────────────────
+// Options are optional for now — when supplied they must belong to the
+// listing's sub-category, be active, and cover each dimension at most once.
+async function resolveVariantOptions(subCategoryId, optionIds) {
+  const ids = [...new Set(optionIds)];
+  if (!ids.length) return [];
+
+  const options = await prisma.variantOption.findMany({
+    where: { id: { in: ids }, subCategoryId, status: 'active' },
+    select: { id: true, dimension: true },
+  });
+  if (options.length !== ids.length) {
+    throw new AppError('One or more options do not belong to the selected category', 400, 'INVALID_VARIANT_OPTION');
+  }
+
+  const dimensions = new Set();
+  for (const { dimension } of options) {
+    if (dimensions.has(dimension)) {
+      throw new AppError(`Choose only one ${dimension} option`, 400, 'DUPLICATE_VARIANT_DIMENSION');
+    }
+    dimensions.add(dimension);
+  }
+
+  return options.map((o) => ({ variantOptionId: o.id, dimension: o.dimension }));
+}
+
+const VARIANTS_SELECT = {
+  select: {
+    dimension: true,
+    variantOption: { select: { id: true, value: true, handedness: true } },
+  },
+  orderBy: { variantOption: { displayOrder: 'asc' } },
+};
+
 // ─── Shared select shapes ─────────────────────────────────────────────────────
 const SELLER_CARD_SELECT = {
   id: true,
@@ -59,13 +93,17 @@ const LISTING_CARD_SELECT = {
   sport: { select: { id: true, name: true, slug: true } },
   subCategory: { select: { id: true, name: true, slug: true } },
   brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
+  variants: VARIANTS_SELECT,
 };
 
 // ─── 1. createListing ─────────────────────────────────────────────────────────
 async function createListing(sellerId, data) {
-  const { title, description, sportId, subCategoryId, brandId, condition, colour, price, parcelSize, photos, videoUrl } = data;
+  const { title, description, sportId, subCategoryId, brandId, condition, colour, price, parcelSize, photos, videoUrl, variantOptionIds } = data;
 
-  const shippingFee = await getShippingFee(parcelSize);
+  const [shippingFee, variants] = await Promise.all([
+    getShippingFee(parcelSize),
+    resolveVariantOptions(subCategoryId, variantOptionIds ?? []),
+  ]);
 
   return prisma.listing.create({
     data: {
@@ -83,6 +121,7 @@ async function createListing(sellerId, data) {
       photos,
       videoUrl: videoUrl || null,
       status: 'draft',
+      ...(variants.length ? { variants: { create: variants } } : {}),
     },
     select: {
       id: true,
@@ -153,6 +192,13 @@ async function getListing(listingId, requestingUserId, requestIp) {
       sport: { select: { id: true, name: true, slug: true } },
       subCategory: { select: { id: true, name: true, slug: true, recommendedParcelSize: true, isOversized: true } },
       brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
+      variants: {
+        ...VARIANTS_SELECT,
+        select: {
+          dimension: true,
+          variantOption: { select: { id: true, value: true, notes: true, handedness: true, gender: true, ageGroup: true } },
+        },
+      },
     },
   });
 
@@ -203,9 +249,10 @@ async function getListing(listingId, requestingUserId, requestIp) {
 
 // ─── 4. searchListings ────────────────────────────────────────────────────────
 async function searchListings(filters) {
-  const { q, sport, sub_category, seller, condition, brand, colour, price_min, price_max, sort, featured, page, page_size } = filters;
+  const { q, sport, sub_category, seller, condition, brand, colour, price_min, price_max, hand, variant_option, sort, featured, page, page_size } = filters;
 
   const where = { status: 'live' };
+  const variantFilters = [];
 
   if (seller) where.sellerId = seller;
 
@@ -245,6 +292,31 @@ async function searchListings(filters) {
 
   if (featured === 'true') where.isFeatured = true;
 
+  if (hand) {
+    variantFilters.push({ variants: { some: { variantOption: { handedness: hand } } } });
+  }
+
+  // Options in the same dimension widen the match (SH or LH); different
+  // dimensions narrow it (SH and Grade 1).
+  if (variant_option) {
+    const ids = variant_option.split(',').map((v) => v.trim()).filter((v) => UUID_RE.test(v));
+    const options = ids.length
+      ? await prisma.variantOption.findMany({ where: { id: { in: ids } }, select: { id: true, dimension: true } })
+      : [];
+    if (!options.length) return emptySearchResult(page, page_size);
+
+    const idsByDimension = new Map();
+    for (const { id, dimension } of options) {
+      if (!idsByDimension.has(dimension)) idsByDimension.set(dimension, []);
+      idsByDimension.get(dimension).push(id);
+    }
+    for (const dimensionIds of idsByDimension.values()) {
+      variantFilters.push({ variants: { some: { variantOptionId: { in: dimensionIds } } } });
+    }
+  }
+
+  if (variantFilters.length) where.AND = [...(where.AND ?? []), ...variantFilters];
+
   const ORDER_MAP = {
     newest: { publishedAt: 'desc' },
     oldest: { publishedAt: 'asc' },
@@ -255,7 +327,7 @@ async function searchListings(filters) {
 
   const skip = (page - 1) * page_size;
 
-  const [listings, total, brandRows, colourRows] = await Promise.all([
+  const [listings, total, brandRows, colourRows, variantRows] = await Promise.all([
     prisma.listing.findMany({ where, orderBy, skip, take: page_size, select: LISTING_CARD_SELECT }),
     prisma.listing.count({ where }),
     prisma.listing.findMany({
@@ -270,6 +342,15 @@ async function searchListings(filters) {
       distinct: ['colour'],
       orderBy: { colour: 'asc' },
     }),
+    // Option filters only make sense within one sub-category
+    sub_category
+      ? prisma.listingVariant.findMany({
+        where: { listing: where },
+        distinct: ['variantOptionId'],
+        select: { dimension: true, variantOption: { select: { id: true, value: true, handedness: true } } },
+        orderBy: { variantOption: { displayOrder: 'asc' } },
+      })
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -283,7 +364,25 @@ async function searchListings(filters) {
     availableFilters: {
       brands: brandRows.map((r) => r.brand).filter(Boolean),
       colours: colourRows.map((r) => r.colour),
+      variantDimensions: groupVariantOptions(variantRows),
     },
+  };
+}
+
+function groupVariantOptions(rows) {
+  const dimensions = new Map();
+  for (const { dimension, variantOption } of rows) {
+    if (!dimensions.has(dimension)) dimensions.set(dimension, []);
+    dimensions.get(dimension).push(variantOption);
+  }
+  return [...dimensions].map(([name, options]) => ({ name, options }));
+}
+
+function emptySearchResult(page, pageSize) {
+  return {
+    listings: [],
+    pagination: { page, pageSize, totalResults: 0, totalPages: 0 },
+    availableFilters: { brands: [], colours: [], variantDimensions: [] },
   };
 }
 
@@ -346,7 +445,7 @@ async function getHomepageData(userId) {
 async function updateListing(listingId, sellerId, data) {
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
-    select: { id: true, sellerId: true, status: true, parcelSize: true, sportId: true },
+    select: { id: true, sellerId: true, status: true, parcelSize: true, sportId: true, subCategoryId: true },
   });
 
   if (!listing) throw new AppError('Listing not found', 404, 'LISTING_NOT_FOUND');
@@ -356,7 +455,7 @@ async function updateListing(listingId, sellerId, data) {
   // Per the API spec only sold listings are locked; order snapshots are never touched here.
   if (listing.status === 'sold') throw new AppError('Sold listings cannot be edited', 409, 'LISTING_SOLD');
 
-  const { title, description, condition, colour, price, parcelSize, photos, videoUrl, sportId, subCategoryId, brandId } = data;
+  const { title, description, condition, colour, price, parcelSize, photos, videoUrl, sportId, subCategoryId, brandId, variantOptionIds } = data;
   const updateData = {};
 
   // Category changes: the sub-category must belong to the (new or current) sport
@@ -397,6 +496,16 @@ async function updateListing(listingId, sellerId, data) {
     if (parcelSize !== listing.parcelSize) {
       updateData.shippingFee = await getShippingFee(parcelSize);
     }
+  }
+
+  // Options belong to a sub-category: replace them when supplied, and drop
+  // the old ones when the category changes without new ones being sent.
+  const targetSubCategoryId = updateData.subCategoryId ?? listing.subCategoryId;
+  if (variantOptionIds !== undefined) {
+    const variants = await resolveVariantOptions(targetSubCategoryId, variantOptionIds);
+    updateData.variants = { deleteMany: {}, create: variants };
+  } else if (targetSubCategoryId !== listing.subCategoryId) {
+    updateData.variants = { deleteMany: {} };
   }
 
   return prisma.listing.update({
@@ -458,6 +567,7 @@ async function getMyListings(sellerId, filters) {
         brand: { select: { id: true, name: true, slug: true } },
         sport: { select: { id: true, name: true, slug: true } },
         subCategory: { select: { id: true, name: true, slug: true } },
+        variants: VARIANTS_SELECT,
       },
     }),
     prisma.listing.count({ where }),

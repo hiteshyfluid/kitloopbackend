@@ -5,6 +5,31 @@ require('dotenv').config();
 const prisma = require('../lib/prisma');
 
 const CSV_PATH = path.join(__dirname, '../../prisma/seed-data/sport-master.csv');
+const VARIANTS_CSV_PATH = path.join(__dirname, '../../prisma/seed-data/product-variants.csv');
+
+// The product-variants sheet names some products differently from the
+// sub-category list — "Sport|Product Category" → sub-category name.
+const VARIANT_SUBCATEGORY_ALIASES = {
+  'Cricket|Batting gloves': 'Cricket gloves',
+  'Football|Football (ball)': 'Football',
+  'Golf|Golf irons (set)': 'Golf irons set',
+  'Golf|Golf ball': 'Golf balls',
+  'Tennis|Tennis ball': 'Tennis balls',
+  'Squash|Squash ball': 'Squash balls',
+  'Running|GPS running watch': 'Running watch',
+  'Skiing|Ski (pair)': 'Ski pair',
+  'Skiing|Ski boots (pair)': 'Ski boots',
+  'Ice Hockey|Hockey stick': 'Ice hockey stick',
+  'Ice Hockey|Ice skates (pair)': 'Ice hockey skates',
+  'Badminton|Shuttlecock': 'Badminton shuttlecocks',
+  'Boxing & MMA|Boxing gloves (pair)': 'Boxing gloves',
+  'Cycling|Cycling shoes (pair)': 'Cycling shoes',
+  'Netball|Knee pads (pair)': 'Netball knee pads',
+  'Swimming|Racing suit / wetsuit': 'Swimming costume',
+  'American Football|Football (ball)': 'Am. Football',
+  'American Football|Football helmet': 'Am. Football helmet',
+  'American Football|Shoulder pads': 'Am. Football shoulder pads',
+};
 
 // The order the SRS/task lists sports in — used as the canonical
 // "Browse by Sport" display order.
@@ -108,6 +133,105 @@ function parseCsv(filePath) {
     });
     return row;
   });
+}
+
+// Quote-aware variant of parseCsv — the variants sheet has commas inside quoted notes.
+function parseQuotedCsv(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const records = [];
+  let record = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (inQuotes) {
+      if (ch === '"' && raw[i + 1] === '"') { field += '"'; i += 1; }
+      else if (ch === '"') inQuotes = false;
+      else field += ch;
+    } else if (ch === '"') inQuotes = true;
+    else if (ch === ',') { record.push(field.trim()); field = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && raw[i + 1] === '\n') i += 1;
+      record.push(field.trim());
+      if (record.some(Boolean)) records.push(record);
+      record = [];
+      field = '';
+    } else field += ch;
+  }
+  record.push(field.trim());
+  if (record.some(Boolean)) records.push(record);
+
+  const [header, ...rows] = records;
+  return rows.map((values) => Object.fromEntries(header.map((col, i) => [col, values[i] ?? ''])));
+}
+
+function blankToNull(value) {
+  return value && value !== 'N/A' && value !== '—' ? value : null;
+}
+
+function toHandedness(value) {
+  if (/^left/i.test(value)) return 'left';
+  if (/^right/i.test(value)) return 'right';
+  return null;
+}
+
+async function seedVariantOptions(sportIds) {
+  const rows = parseQuotedCsv(VARIANTS_CSV_PATH);
+  const subCategoryCache = new Map();
+  const orderBySubCategory = new Map();
+  const unmatched = new Set();
+  let count = 0;
+
+  for (const row of rows) {
+    const sportName = row.Sport;
+    const product = row['Product Category'];
+    const key = `${sportName}|${product}`;
+    const sportId = sportIds[sportName];
+
+    if (!subCategoryCache.has(key)) {
+      const name = VARIANT_SUBCATEGORY_ALIASES[key] ?? product;
+      const subCategory = sportId
+        ? await prisma.subCategory.findUnique({ where: { sportId_slug: { sportId, slug: slugify(name) } }, select: { id: true } })
+        : null;
+      subCategoryCache.set(key, subCategory?.id ?? null);
+    }
+
+    const subCategoryId = subCategoryCache.get(key);
+    if (!subCategoryId) {
+      unmatched.add(key);
+      continue;
+    }
+
+    const displayOrder = (orderBySubCategory.get(subCategoryId) ?? 0) + 1;
+    orderBySubCategory.set(subCategoryId, displayOrder);
+
+    const dimension = row['Variant Dimension'];
+    const value = row['Variant Value'];
+    const data = {
+      notes: blankToNull(row['Variant Notes']),
+      handedness: toHandedness(row.Handedness),
+      gender: blankToNull(row.Gender),
+      ageGroup: blankToNull(row['Age Group']),
+      surface: blankToNull(row['Surface / Terrain']),
+      shippingBoxCm: blankToNull(row['Shipping Box (L x W x H cm)']),
+      estWeight: blankToNull(row['Est. Weight']),
+      displayOrder,
+    };
+
+    await prisma.variantOption.upsert({
+      where: { subCategoryId_dimension_value: { subCategoryId, dimension, value } },
+      update: data,
+      create: { subCategoryId, dimension, value, ...data, status: 'active' },
+    });
+    count += 1;
+  }
+
+  for (const key of unmatched) {
+    console.warn(`  ! No sub-category for variant product "${key.replace('|', ' → ')}" — skipped`);
+  }
+
+  return count;
 }
 
 async function seedSports(rowsBySport) {
@@ -226,6 +350,10 @@ async function main() {
   console.log('Seeding sub-categories...');
   const subCategoryCount = await seedSubCategories(rowsBySport, sportIds);
   console.log(`  ✓ ${subCategoryCount} sub-categories seeded`);
+
+  console.log('Seeding variant options...');
+  const variantCount = await seedVariantOptions(sportIds);
+  console.log(`  ✓ ${variantCount} variant options seeded`);
 
   console.log(`Seeding ${BRANDS.length} brands...`);
   const brandCount = await seedBrands();
