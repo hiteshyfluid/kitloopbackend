@@ -55,6 +55,7 @@ async function getSellerBalance(sellerId) {
 
   let pendingRelease = 0;      // held in escrow, not yet available
   let availableForPayout = 0;  // released, not yet paid out
+  let payoutInProgress = 0;    // payout requested (Stripe transfer created), not yet confirmed
   let totalPaidOut = 0;        // completed payouts
 
   for (const p of payments) {
@@ -64,6 +65,10 @@ async function getSellerBalance(sellerId) {
     } else if (p.escrowStatus === 'released') {
       if (p.payoutStatus === 'completed') {
         totalPaidOut += amount;
+      } else if (p.payoutStatus === 'initiated') {
+        // Already transferred — must not show as withdrawable again
+        // (requestPayout only picks up pending / null payouts).
+        payoutInProgress += amount;
       } else {
         availableForPayout += amount;
       }
@@ -73,6 +78,7 @@ async function getSellerBalance(sellerId) {
   return {
     pendingRelease: Number(pendingRelease.toFixed(2)),
     availableForPayout: Number(availableForPayout.toFixed(2)),
+    payoutInProgress: Number(payoutInProgress.toFixed(2)),
     totalPaidOut: Number(totalPaidOut.toFixed(2)),
     currency: 'GBP',
   };

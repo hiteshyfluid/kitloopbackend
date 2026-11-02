@@ -51,6 +51,7 @@ const ORDER_SELECT = {
       payoutStatus: true,
       amountTotal: true,
       amountSellerPayout: true,
+      amountRefunded: true,
       currency: true,
       paymentMethod: true,
       stripePaymentIntentId: true,
