@@ -487,6 +487,47 @@ Used from Settings → Security → Active Sessions, to log out a different devi
 
 ---
 
+## **17\. Update Contact & Ship-From Address**
+
+**`PUT /users/settings/address`**
+
+The seller's real name, phone and address. Couriers need these as the sender ("ship from") on shipping labels. Private: returned only by `GET /users/profile` (own profile), never on public profiles or listings.
+
+**Auth required:** Yes
+
+**Request body:**
+
+```json
+{
+  "full_name": "James Wilson",
+  "phone": "07700 900123",
+  "line1": "12 Willow Lane",
+  "line2": "",
+  "city": "Leeds",
+  "postcode": "ls1 2jp"
+}
+```
+
+**Validation rules:**
+
+* `full_name` — required, 2–100 characters  
+* `phone` — required, UK number (`07…`, `01…`/`02…` or `+44…`); spaces, brackets and dashes are stripped  
+* `line1` — required, max 100 chars; `line2` optional  
+* `city` — required, max 60 chars  
+* `postcode` — required, valid UK postcode; stored normalised, e.g. `LS1 2JP`
+
+**Success response — 200 OK:** the updated own-profile `user`, including `full_name`, `phone`, `address_line1`, `address_line2`, `address_city`, `address_postcode`.
+
+**Error responses:**
+
+| Status | Code | When |
+| ----- | ----- | ----- |
+| 400 | `VALIDATION_ERROR` | e.g. "Enter a valid UK postcode", "Enter a valid UK phone number" |
+
+*Not yet enforced:* sellers can still list without an address. Once courier labels go live, publishing/selling will require it.
+
+---
+
 ### **A note on how this maps to your database**
 
 Every endpoint above reads or writes to the `users` table we built in migration `001_users.sql`. For example:
@@ -1172,7 +1213,9 @@ Called the moment a buyer taps Buy Now. Validates the listing is still purchasab
   "address_line1": "123 High Street",
   "address_line2": "",
   "city": "London",
-  "postcode": "SW1A 1AA"
+  "postcode": "SW1A 1AA",
+  "full_name": "Sarah Ahmed",
+  "phone": "07700 900456"
 }
 ```
 
@@ -1180,7 +1223,11 @@ Called the moment a buyer taps Buy Now. Validates the listing is still purchasab
 
 * `address_line1` — required, max 100 chars  
 * `city` — required, max 60 chars, letters only  
-* `postcode` — required, valid UK postcode format
+* `postcode` — required, valid UK postcode format  
+* `full_name` — optional for now, 2–100 chars. Recipient name for the courier label  
+* `phone` — optional for now, UK number. Couriers use it for delivery updates  
+
+`full_name` and `phone` are saved on the order as `delivery_name` / `delivery_phone`. They will become required once courier labels go live, so the checkout form should start collecting them now.
 
 **Success response — 200 OK:**
 
@@ -1361,6 +1408,14 @@ Powers Buyer → My Orders.
       "city": "London",
       "postcode": "SW1A 1AA"
     },
+    "delivery_name": "Sarah Ahmed",
+    "delivery_phone": "07700900456",
+    "shipping_courier": "YodelC2C",
+    "shipping_service_id": "YOD-C2CPS",
+    "shipping_reference": "KL-order-uuid-abc",
+    "label_url": "https://.../label.pdf",
+    "label_created_at": "2026-06-19T11:20:00Z",
+    "tracking_url": "https://...",
     "timeline": {
       "created_at": "2026-06-19T11:15:00Z",
       "dispatched_at": "2026-06-20T09:00:00Z",
@@ -1373,6 +1428,8 @@ Powers Buyer → My Orders.
   }
 }
 ```
+
+*(`shipping_courier`, `shipping_service_id`, `shipping_reference`, `label_url`, `label_created_at` and `tracking_url` are filled in once the courier integration creates a label — all `null` until then.)*
 
 *(`can_raise_dispute` and `can_confirm_delivery` are pre-computed booleans the frontend uses to show/hide buttons — saves the frontend from re-implementing the eligibility rules from the SRS)*
 

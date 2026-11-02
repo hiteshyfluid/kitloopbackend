@@ -208,6 +208,8 @@ async function submitAddress(sessionId, buyerId, addressData) {
     line2:    addressData.line2 || null,
     city:     addressData.city,
     postcode: addressData.postcode.toUpperCase(),
+    name:     addressData.full_name || null,
+    phone:    addressData.phone || null,
   };
 
   return session;
@@ -346,6 +348,8 @@ async function confirmOrder(sessionId, buyerId, paymentIntentId) {
           deliveryAddressLine2: addr.line2,
           deliveryCity:         addr.city,
           deliveryPostcode:     addr.postcode,
+          deliveryName:         addr.name ?? null,
+          deliveryPhone:        addr.phone ?? null,
           agreedPrice:          session.counterOfferId ? session.itemPrice : null,
           snapshotListingTitle: session.listing.title,
           snapshotCondition:    session.listing.condition,
@@ -472,6 +476,8 @@ async function confirmCartOrder(session, buyerId, pi) {
             deliveryAddressLine2: addr.line2,
             deliveryCity:         addr.city,
             deliveryPostcode:     addr.postcode,
+            deliveryName:         addr.name ?? null,
+            deliveryPhone:        addr.phone ?? null,
             agreedPrice:          null,
             snapshotListingTitle: item.listing.title,
             snapshotCondition:    item.listing.condition,

@@ -3,6 +3,7 @@ const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { sendSuccess } = require('../utils/response');
 const checkoutService = require('../services/checkoutService');
+const { ukPhone, fullName } = require('../validators/addressValidators');
 
 function validate(schema, data) {
   const result = schema.safeParse(data);
@@ -22,6 +23,9 @@ const addressSchema = z.object({
   line2:    z.string().trim().max(100).optional(),
   city:     z.string().trim().min(1, 'City is required').max(60),
   postcode: z.string().trim().min(1, 'Postcode is required').max(10),
+  // Recipient contact for the courier — optional until the checkout form collects it
+  full_name: fullName.optional(),
+  phone:     ukPhone.optional(),
 });
 
 const confirmSchema = z.object({

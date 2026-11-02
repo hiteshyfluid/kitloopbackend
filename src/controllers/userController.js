@@ -4,6 +4,7 @@ const catchAsync = require('../utils/catchAsync');
 const { sendSuccess } = require('../utils/response');
 const userService    = require('../services/userService');
 const reviewService  = require('../services/reviewService');
+const { ukPostcode, ukPhone, fullName } = require('../validators/addressValidators');
 
 function validate(schema, data) {
   const result = schema.safeParse(data);
@@ -35,6 +36,15 @@ const privacySchema = z.object({
 
 const postageSchema = z.object({
   default_parcel_size: z.enum(['small', 'medium', 'large', 'oversized']).nullable(),
+});
+
+const addressSchema = z.object({
+  full_name: fullName,
+  phone:     ukPhone,
+  line1:     z.string().trim().min(1, 'Address line 1 is required').max(100),
+  line2:     z.string().trim().max(100).optional(),
+  city:      z.string().trim().min(1, 'City is required').max(60),
+  postcode:  ukPostcode,
 });
 
 const holidaySchema = z.object({
@@ -114,6 +124,13 @@ const updatePostageSettings = catchAsync(async (req, res) => {
   sendSuccess(res, 200, { user });
 });
 
+// PUT /api/users/settings/address
+const updateAddress = catchAsync(async (req, res) => {
+  const { full_name, phone, line1, line2, city, postcode } = validate(addressSchema, req.body);
+  const user = await userService.updateAddress(req.user.id, { fullName: full_name, phone, line1, line2, city, postcode });
+  sendSuccess(res, 200, { user });
+});
+
 // PUT /api/users/holiday-mode
 const toggleHolidayMode = catchAsync(async (req, res) => {
   const { enabled } = validate(holidaySchema, req.body);
@@ -142,6 +159,7 @@ module.exports = {
   updateNotificationSettings,
   updatePrivacySettings,
   updatePostageSettings,
+  updateAddress,
   toggleHolidayMode,
   getBalance,
   requestAccountDeletion,

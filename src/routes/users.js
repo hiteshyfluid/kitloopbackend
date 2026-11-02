@@ -10,6 +10,7 @@ router.put('/profile',                    requireAuth, userCtrl.updateProfile);
 router.put('/settings/notifications',     requireAuth, userCtrl.updateNotificationSettings);
 router.put('/settings/privacy',           requireAuth, userCtrl.updatePrivacySettings);
 router.put('/settings/postage',           requireAuth, userCtrl.updatePostageSettings);
+router.put('/settings/address',           requireAuth, userCtrl.updateAddress);
 router.put('/holiday-mode',               requireAuth, userCtrl.toggleHolidayMode);
 router.get('/balance',                    requireAuth, userCtrl.getBalance);
 router.delete('/account',                 requireAuth, userCtrl.requestAccountDeletion);
