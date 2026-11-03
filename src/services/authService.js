@@ -12,12 +12,15 @@ const qrcode = require('qrcode');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { signToken } = require('../utils/jwt');
+const emailTemplates = require('../templates/emailTemplates');
 
 const SALT_ROUNDS = 12;
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
-const EMAIL_VERIFICATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
+const EMAIL_OTP_EXPIRY_MS = 10 * 60 * 1000;
+const EMAIL_OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_EMAIL_OTP_ATTEMPTS = 5;
 const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000;
 const SMS_CODE_EXPIRY_MS = 10 * 60 * 1000;
 const TWO_FACTOR_ISSUER = 'Kit Loop';
@@ -49,8 +52,25 @@ function hashToken(token) {
 }
 
 function generateNumericCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(100000, 1000000));
 }
+
+// Salted with the user id so a 6-digit code can never be looked up on its own
+// (e.g. through the legacy ?token= link endpoint) across every account.
+function hashEmailCode(userId, code) {
+  return hashToken(`${userId}:${code}`);
+}
+
+function safeEqual(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Wrong-code attempts per user, reset whenever a new code is issued. In memory
+// is enough: a restart only gives an attacker 5 more guesses at a 1-in-a-million
+// code that expires in 10 minutes, and the route is IP rate-limited as well.
+const emailOtpAttempts = new Map();
 
 function parseExpiry(str) {
   const match = /^(\d+)\s*(ms|s|m|h|d)$/.exec(String(str).trim());
@@ -150,21 +170,35 @@ async function createSession(userId, meta = {}) {
 
 // ─── Email sending (Gmail SMTP, then Resend, then console) ───
 
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, text }) {
   const from = process.env.EMAIL_FROM
     || (gmailUser ? `Kit Loop <${gmailUser}>` : 'Kit Loop <no-reply@kitloop.app>');
 
   if (gmailTransporter) {
-    await gmailTransporter.sendMail({ from, to, subject, html });
+    await gmailTransporter.sendMail({ from, to, subject, html, text });
     return;
   }
 
   if (resend) {
-    await resend.emails.send({ from, to, subject, html });
+    const { error } = await resend.emails.send({ from, to, subject, html, text });
+    if (error) throw new Error(`Resend: ${error.message}`);
     return;
   }
 
-  console.log(`[email:dev] To: ${to} | Subject: ${subject}\n${html}`);
+  console.log(`[email:dev] To: ${to} | Subject: ${subject}\n${text || html}`);
+}
+
+// Logo uploaded in Admin → Branding; emails fall back to a text wordmark
+async function getEmailLogoUrl() {
+  const row = await prisma.siteSetting
+    .findUnique({ where: { settingKey: 'site_logo_url' } })
+    .catch(() => null);
+  const url = row?.settingValue;
+  return typeof url === 'string' && url.startsWith('https://') ? url : null;
+}
+
+function clientUrl() {
+  return (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/$/, '');
 }
 
 // Dev-only fallback — wire up a real SMS provider (e.g. Twilio) before production.
@@ -172,26 +206,52 @@ async function sendSms({ to, body }) {
   console.log(`[sms:dev] To: ${to} | ${body}`);
 }
 
-async function sendVerificationEmail(email, token) {
-  const link = `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
-  await sendEmail({
-    to: email,
-    subject: 'Verify your Kit Loop email',
-    html: `<p>Welcome to Kit Loop! Click below to verify your email address. This link expires in 24 hours.</p><p><a href="${link}">${link}</a></p>`,
+async function sendVerificationEmail(user, code) {
+  const params = new URLSearchParams({ email: user.email, code });
+  const message = emailTemplates.verificationEmail({
+    name: user.displayName || user.username,
+    code,
+    verifyUrl: `${clientUrl()}/verify-email?${params}`,
+    expiresInMinutes: EMAIL_OTP_EXPIRY_MS / 60000,
+    logoUrl: await getEmailLogoUrl(),
   });
+  await sendEmail({ to: user.email, ...message });
 }
 
-async function sendPasswordResetEmail(email, token) {
-  const link = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
-  await sendEmail({
-    to: email,
-    subject: 'Reset your Kit Loop password',
-    html: `<p>We received a request to reset your password. This link expires in 1 hour. If you didn't request this, you can ignore this email.</p><p><a href="${link}">${link}</a></p>`,
+async function sendPasswordResetEmail(user, token) {
+  const message = emailTemplates.passwordResetEmail({
+    name: user.displayName || user.username,
+    resetUrl: `${clientUrl()}/reset-password?token=${token}`,
+    expiresInMinutes: PASSWORD_RESET_EXPIRY_MS / 60000,
+    logoUrl: await getEmailLogoUrl(),
   });
+  await sendEmail({ to: user.email, ...message });
 }
 
 async function sendSecurityAlertEmail(email, subject, body) {
-  await sendEmail({ to: email, subject, html: `<p>${body}</p>` });
+  const message = emailTemplates.securityAlertEmail({ subject, body, logoUrl: await getEmailLogoUrl() });
+  await sendEmail({ to: email, ...message });
+}
+
+// Stores a fresh 6-digit code (replacing any earlier one) and emails it.
+async function issueEmailVerificationCode(user) {
+  const code = generateNumericCode();
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerificationToken: hashEmailCode(user.id, code),
+      emailVerificationExpires: new Date(Date.now() + EMAIL_OTP_EXPIRY_MS),
+    },
+  });
+  emailOtpAttempts.delete(user.id);
+  await sendVerificationEmail(user, code);
+}
+
+// A code was sent less than a minute ago — don't flood the inbox
+function isWithinResendCooldown(user) {
+  if (!user.emailVerificationExpires) return false;
+  const issuedAt = user.emailVerificationExpires.getTime() - EMAIL_OTP_EXPIRY_MS;
+  return Date.now() - issuedAt < EMAIL_OTP_RESEND_COOLDOWN_MS;
 }
 
 // ─── Signup / Login (email) ───
@@ -200,31 +260,53 @@ async function signupWithEmail(email, password, username) {
   email = normalizeEmail(email);
   username = username.trim();
 
-  const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { username }] } });
-  if (existing) {
-    if (existing.email === email) {
-      throw new AppError('An account with this email already exists — log in instead', 409, 'EMAIL_EXISTS');
-    }
+  const [emailOwner, usernameOwner] = await Promise.all([
+    prisma.user.findUnique({ where: { email } }),
+    prisma.user.findUnique({ where: { username } }),
+  ]);
+
+  // Signed up before but never entered the code — nobody has proven they own
+  // this inbox yet, so let them start over rather than locking the email out.
+  const resumable = emailOwner
+    && !emailOwner.emailVerified
+    && emailOwner.authProvider === 'email'
+    && !emailOwner.deletedAt;
+
+  if (emailOwner && !resumable) {
+    throw new AppError('An account with this email already exists — log in instead', 409, 'EMAIL_EXISTS');
+  }
+  if (usernameOwner && usernameOwner.id !== emailOwner?.id) {
     throw new AppError('This username is already taken', 409, 'USERNAME_TAKEN');
   }
 
   const passwordHash = await hashPassword(password);
-  const verificationToken = generateRawToken();
 
-  const user = await prisma.user.create({
-    data: {
-      email,
-      username,
-      displayName: username,
-      authProvider: 'email',
-      passwordHash,
-      emailVerified: false,
-      emailVerificationToken: hashToken(verificationToken),
-      emailVerificationExpires: new Date(Date.now() + EMAIL_VERIFICATION_EXPIRY_MS),
-    },
-  });
+  const user = resumable
+    ? await prisma.user.update({
+        where: { id: emailOwner.id },
+        data: { username, displayName: username, passwordHash },
+      })
+    : await prisma.user.create({
+        data: {
+          email,
+          username,
+          displayName: username,
+          authProvider: 'email',
+          passwordHash,
+          emailVerified: false,
+        },
+      });
 
-  await sendVerificationEmail(user.email, verificationToken);
+  // A code that went out moments ago is still valid — don't send a second one
+  if (resumable && isWithinResendCooldown(emailOwner)) {
+    return sanitizeUser(user);
+  }
+
+  // The account exists now either way. If the mail provider hiccups, the user
+  // can still hit "Resend code" instead of being stuck with EMAIL_EXISTS.
+  await issueEmailVerificationCode(user).catch((err) =>
+    console.error('[auth] Failed to send verification code on signup:', err.message)
+  );
 
   return sanitizeUser(user);
 }
@@ -280,6 +362,22 @@ async function loginWithEmail(email, password, code = null, meta = {}) {
   if (!validPassword) {
     await registerFailedLogin(user);
     throw new AppError('Incorrect email or password — please try again', 401, 'INVALID_CREDENTIALS');
+  }
+
+  // Password is right but the address was never confirmed — send a code
+  // (unless one just went out) and let the client show the code screen.
+  if (!user.emailVerified && user.authProvider === 'email') {
+    if (!isWithinResendCooldown(user)) {
+      await issueEmailVerificationCode(user).catch((err) =>
+        console.error('[auth] Failed to send verification code on login:', err.message)
+      );
+    }
+    throw new AppError(
+      'Please verify your email — we’ve sent a 6-digit code to your inbox.',
+      403,
+      'EMAIL_NOT_VERIFIED',
+      { email: user.email }
+    );
   }
 
   if (user.twoFactorEnabled) {
@@ -408,7 +506,68 @@ async function loginOrSignupWithSocial({ email, name, avatarUrl, provider }, met
 
 // ─── Email verification ───
 
+// Checks a 6-digit code and, on success, signs the user straight in.
+async function verifyEmailCode(email, code, meta = {}) {
+  email = normalizeEmail(email);
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  if (!user || user.deletedAt) {
+    throw new AppError('That code isn’t right — check it and try again', 400, 'CODE_INVALID');
+  }
+  if (user.emailVerified) {
+    throw new AppError('This email is already verified — please log in', 400, 'ALREADY_VERIFIED');
+  }
+  if (!user.emailVerificationToken || !user.emailVerificationExpires) {
+    throw new AppError('This code is no longer valid — request a new one', 400, 'CODE_EXPIRED');
+  }
+  if (user.emailVerificationExpires < new Date()) {
+    throw new AppError('This code has expired — request a new one', 400, 'CODE_EXPIRED');
+  }
+
+  if (!safeEqual(user.emailVerificationToken, hashEmailCode(user.id, code))) {
+    const attempts = (emailOtpAttempts.get(user.id) || 0) + 1;
+    if (attempts >= MAX_EMAIL_OTP_ATTEMPTS) {
+      emailOtpAttempts.delete(user.id);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerificationToken: null, emailVerificationExpires: null },
+      });
+      throw new AppError('Too many incorrect attempts — request a new code', 429, 'CODE_LOCKED');
+    }
+    emailOtpAttempts.set(user.id, attempts);
+    const left = MAX_EMAIL_OTP_ATTEMPTS - attempts;
+    throw new AppError(
+      `That code isn’t right — ${left} attempt${left === 1 ? '' : 's'} left`,
+      400,
+      'CODE_INVALID'
+    );
+  }
+
+  emailOtpAttempts.delete(user.id);
+
+  if (user.accountStatus !== 'active') {
+    throw buildInactiveAccountError(user);
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationExpires: null,
+      lastActiveAt: new Date(),
+    },
+  });
+
+  const { token, session } = await createSession(updated.id, meta);
+  return { user: sanitizeUser(updated), token, session: { id: session.id, expiresAt: session.expiresAt } };
+}
+
+// Legacy ?token= links from emails sent before the switch to 6-digit codes.
 async function verifyEmail(token) {
+  if (!/^[0-9a-f]{64}$/i.test(token)) {
+    throw new AppError('This verification link is invalid', 400, 'TOKEN_INVALID');
+  }
   const hashed = hashToken(token);
   const user = await prisma.user.findFirst({ where: { emailVerificationToken: hashed } });
 
@@ -431,16 +590,9 @@ async function resendVerificationEmail(email) {
   email = normalizeEmail(email);
   const user = await prisma.user.findUnique({ where: { email } });
 
-  if (user && !user.emailVerified && user.authProvider === 'email') {
-    const verificationToken = generateRawToken();
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        emailVerificationToken: hashToken(verificationToken),
-        emailVerificationExpires: new Date(Date.now() + EMAIL_VERIFICATION_EXPIRY_MS),
-      },
-    });
-    await sendVerificationEmail(user.email, verificationToken);
+  // Silent no-op for unknown/verified addresses so this can't be used to probe accounts
+  if (user && !user.emailVerified && user.authProvider === 'email' && !isWithinResendCooldown(user)) {
+    await issueEmailVerificationCode(user);
   }
 }
 
@@ -459,7 +611,7 @@ async function forgotPassword(email) {
         passwordResetExpires: new Date(Date.now() + PASSWORD_RESET_EXPIRY_MS),
       },
     });
-    await sendPasswordResetEmail(user.email, resetToken);
+    await sendPasswordResetEmail(user, resetToken);
   }
 }
 
@@ -720,6 +872,7 @@ module.exports = {
   sendVerificationEmail,
   sendPasswordResetEmail,
   verifyEmail,
+  verifyEmailCode,
   resendVerificationEmail,
   forgotPassword,
   resetPassword,

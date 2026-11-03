@@ -9,6 +9,7 @@ const {
   appleSchema,
   emailSchema,
   verifyEmailSchema,
+  verifyEmailCodeSchema,
   resetPasswordSchema,
   changePasswordSchema,
   twoFactorEnableSchema,
@@ -37,11 +38,18 @@ const signupEmail = catchAsync(async (req, res) => {
   const user = await authService.signupWithEmail(email, password, username);
   sendSuccess(res, 201, {
     user: { id: user.id, email: user.email, username: user.username, emailVerified: user.emailVerified, role: user.role },
-    message: 'Verification email sent. Please verify your email to start buying or selling.',
+    message: 'We’ve emailed you a 6-digit code. Enter it to verify your email.',
   });
 });
 
-// GET /auth/verify-email
+// POST /auth/verify-email — 6-digit code; signs the user in on success
+const verifyEmailCode = catchAsync(async (req, res) => {
+  const { email, code } = validate(verifyEmailCodeSchema, req.body);
+  const { token, user } = await authService.verifyEmailCode(email, code, getRequestMeta(req));
+  sendSuccess(res, 200, { message: 'Email verified successfully.', token, user });
+});
+
+// GET /auth/verify-email — legacy link token
 const verifyEmail = catchAsync(async (req, res) => {
   const { token } = validate(verifyEmailSchema, req.query);
   const user = await authService.verifyEmail(token);
@@ -52,7 +60,7 @@ const verifyEmail = catchAsync(async (req, res) => {
 const resendVerification = catchAsync(async (req, res) => {
   const { email } = validate(emailSchema, req.body);
   await authService.resendVerificationEmail(email);
-  sendSuccess(res, 200, { message: 'Verification email resent.' });
+  sendSuccess(res, 200, { message: 'If that account still needs verifying, a new code is on its way.' });
 });
 
 // POST /auth/google
@@ -167,6 +175,7 @@ const changePassword = catchAsync(async (req, res) => {
 module.exports = {
   signupEmail,
   verifyEmail,
+  verifyEmailCode,
   resendVerification,
   googleAuth,
   appleAuth,

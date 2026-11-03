@@ -599,18 +599,28 @@ async function toggleFavourite(userId, listingId) {
     select: { id: true },
   });
 
+  // A double-tap sends two toggles at once; whichever loses the race finds the
+  // row already created/deleted. Answer with the state the winner produced.
   if (existing) {
-    await prisma.$transaction([
-      prisma.favourite.delete({ where: { id: existing.id } }),
-      prisma.listing.update({ where: { id: listingId }, data: { wishlistCount: { decrement: 1 } } }),
-    ]);
+    try {
+      await prisma.$transaction([
+        prisma.favourite.delete({ where: { id: existing.id } }),
+        prisma.listing.update({ where: { id: listingId }, data: { wishlistCount: { decrement: 1 } } }),
+      ]);
+    } catch (err) {
+      if (err.code !== 'P2025') throw err;
+    }
     return { isFavourited: false, wishlistCount: Math.max(0, listing.wishlistCount - 1) };
   }
 
-  await prisma.$transaction([
-    prisma.favourite.create({ data: { userId, listingId } }),
-    prisma.listing.update({ where: { id: listingId }, data: { wishlistCount: { increment: 1 } } }),
-  ]);
+  try {
+    await prisma.$transaction([
+      prisma.favourite.create({ data: { userId, listingId } }),
+      prisma.listing.update({ where: { id: listingId }, data: { wishlistCount: { increment: 1 } } }),
+    ]);
+  } catch (err) {
+    if (err.code !== 'P2002') throw err;
+  }
 
   return { isFavourited: true, wishlistCount: listing.wishlistCount + 1 };
 }

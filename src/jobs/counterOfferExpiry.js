@@ -78,7 +78,11 @@ async function runCounterOfferExpiry() {
 }
 
 function startCounterOfferExpiryJob() {
-  const job = cron.schedule(SCHEDULE, runCounterOfferExpiry, { timezone: 'UTC' });
+  const job = cron.schedule(
+    SCHEDULE,
+    () => runCounterOfferExpiry().catch((err) => console.error('[counterOfferExpiry] Run failed:', err.message)),
+    { timezone: 'UTC' },
+  );
   console.log('[counterOfferExpiry] Cron scheduled:', SCHEDULE);
   return job;
 }

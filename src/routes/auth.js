@@ -17,6 +17,7 @@ const authLimiter = rateLimit({
 // Public routes
 router.post('/signup/email', authLimiter, authController.signupEmail);
 router.get('/verify-email', authController.verifyEmail);
+router.post('/verify-email', authLimiter, authController.verifyEmailCode);
 router.post('/resend-verification', authLimiter, authController.resendVerification);
 router.post('/google', authLimiter, authController.googleAuth);
 router.post('/apple', authLimiter, authController.appleAuth);

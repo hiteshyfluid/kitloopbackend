@@ -82,7 +82,11 @@ async function runDisputeEscalation() {
 }
 
 function startDisputeEscalationJob() {
-  const job = cron.schedule(SCHEDULE, runDisputeEscalation, { timezone: 'UTC' });
+  const job = cron.schedule(
+    SCHEDULE,
+    () => runDisputeEscalation().catch((err) => console.error('[disputeEscalation] Run failed:', err.message)),
+    { timezone: 'UTC' },
+  );
   console.log('[disputeEscalation] Cron scheduled:', SCHEDULE);
   return job;
 }

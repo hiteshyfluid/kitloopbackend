@@ -43,6 +43,11 @@ const verifyEmailSchema = z.object({
   token: z.string().min(1, 'token is required'),
 });
 
+const verifyEmailCodeSchema = z.object({
+  email: z.string().trim().email(),
+  code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from your email'),
+});
+
 const resetPasswordSchema = z.object({
   token: z.string().min(1, 'token is required'),
   new_password: password,
@@ -85,6 +90,7 @@ module.exports = {
   appleSchema,
   emailSchema,
   verifyEmailSchema,
+  verifyEmailCodeSchema,
   resetPasswordSchema,
   changePasswordSchema,
   twoFactorEnableSchema,

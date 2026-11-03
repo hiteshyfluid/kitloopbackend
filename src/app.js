@@ -88,9 +88,45 @@ app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Not found', code: 'NOT_FOUND' });
 });
 
+// Prisma error codes that describe a bad request rather than a server fault.
+// See https://www.prisma.io/docs/orm/reference/error-reference
+const PRISMA_ERRORS = {
+  P2002: { status: 409, code: 'ALREADY_EXISTS', message: 'This record already exists' },
+  P2003: { status: 400, code: 'INVALID_REFERENCE', message: 'A referenced record does not exist' },
+  P2025: { status: 404, code: 'NOT_FOUND', message: 'Record not found' },
+};
+
+function normalizeError(err) {
+  if (err.message === 'Not allowed by CORS') {
+    return { status: 403, code: 'CORS_BLOCKED', message: err.message };
+  }
+  // Malformed JSON or an oversized body from express.json()
+  if (err.type === 'entity.parse.failed') {
+    return { status: 400, code: 'INVALID_JSON', message: 'Request body is not valid JSON' };
+  }
+  if (err.type === 'entity.too.large') {
+    return { status: 413, code: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large' };
+  }
+  if (typeof err.code === 'string' && PRISMA_ERRORS[err.code]) {
+    return PRISMA_ERRORS[err.code];
+  }
+  if (err.name === 'PrismaClientValidationError') {
+    return { status: 400, code: 'VALIDATION_ERROR', message: 'Invalid request data' };
+  }
+  return null;
+}
+
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  const known = normalizeError(err);
+  if (known) {
+    if (res.headersSent) return next(err);
+    return res.status(known.status).json({ success: false, error: known.message, code: known.code });
+  }
+
   const status = err.status || 500;
+  // 4xx are expected client mistakes — only server faults need a stack trace
+  if (status >= 500) console.error(`[${req.method} ${req.originalUrl}]`, err.stack || err);
+  if (res.headersSent) return next(err);
   res.status(status).json({
     success: false,
     error:

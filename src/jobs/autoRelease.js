@@ -76,7 +76,7 @@ async function runAutoRelease() {
 }
 
 function startAutoReleaseJob() {
-  const job = cron.schedule(SCHEDULE, runAutoRelease, {
+  const job = cron.schedule(SCHEDULE, () => runAutoRelease().catch((err) => console.error('[autoRelease] Run failed:', err.message)), {
     timezone: 'UTC',
   });
   console.log('[autoRelease] Cron scheduled:', SCHEDULE);
