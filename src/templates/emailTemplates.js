@@ -121,7 +121,7 @@ function verificationEmail({ name, code, verifyUrl, expiresInMinutes, logoUrl })
     <p style="margin:24px 0 0;font-size:13px;color:${BRAND.muted};">If you didn’t create a ${BRAND.name} account, you can safely ignore this email. Never share this code with anyone — our team will never ask for it.</p>`;
 
   return {
-    subject: `${code} is your Kit Loop verification code`,
+    subject: `${code} is your verification code for The Kit Loop`,
     html: layout({
       preheader: `Your verification code is ${code}. It expires in ${expiresInMinutes} minutes.`,
       eyebrow: 'Thanks for signing up!',
@@ -161,7 +161,7 @@ function securityAlertEmail({ subject, body, logoUrl }) {
     html: layout({
       preheader: body,
       eyebrow: 'Security alert',
-      title: subject.replace(/^Kit Loop security alert:\s*/i, ''),
+      title: subject.replace(/^(The )?Kit Loop security alert:\s*/i, ''),
       bodyHtml: `<p style="margin:0;">${escapeHtml(body)}</p>`,
       logoUrl,
     }),
@@ -169,4 +169,41 @@ function securityAlertEmail({ subject, body, logoUrl }) {
   };
 }
 
-module.exports = { verificationEmail, passwordResetEmail, securityAlertEmail };
+// ─── Admin: a new listing went live ───────────────────────────────────────────
+function newListingAdminEmail({ listing, adminUrl, listingUrl, logoUrl }) {
+  const price = `£${Number(listing.price).toFixed(2)}`;
+  const seller = listing.seller?.displayName || listing.seller?.username || 'A seller';
+  const photo = Array.isArray(listing.photos) ? listing.photos[0] : null;
+  const rows = [
+    ['Seller', `${seller}${listing.seller?.username ? ` (@${listing.seller.username})` : ''}`],
+    ['Price', price],
+    ['Sport', listing.sport?.name],
+    ['Category', listing.subCategory?.name],
+    ['Brand', listing.brand?.name],
+    ['Condition', listing.condition?.replace(/_/g, ' ')],
+  ].filter(([, v]) => v);
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">A new listing has just gone live on ${BRAND.name}. No approval is needed — this is for your information.</p>
+    ${photo ? `<img src="${escapeHtml(photo)}" alt="" width="160" style="display:block;width:160px;max-width:100%;border-radius:8px;margin:0 0 16px;border:0;">` : ''}
+    <p style="margin:0 0 12px;font-size:17px;font-weight:700;">${escapeHtml(listing.title)}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;font-family:${BRAND.font};font-size:14px;">
+      ${rows.map(([k, v]) => `<tr><td style="padding:3px 16px 3px 0;color:${BRAND.muted};">${escapeHtml(k)}</td><td style="padding:3px 0;">${escapeHtml(v)}</td></tr>`).join('')}
+    </table>
+    ${button(adminUrl, 'Review in admin')}
+    <p style="margin:16px 0 0;font-size:13px;color:${BRAND.muted};">Or view it on the site: <a href="${escapeHtml(listingUrl)}" style="color:${BRAND.teal};">${escapeHtml(listingUrl)}</a></p>`;
+
+  return {
+    subject: `New listing: ${listing.title} (${price})`,
+    html: layout({
+      preheader: `${seller} listed "${listing.title}" for ${price}.`,
+      eyebrow: 'Admin notification',
+      title: 'New Product Uploaded',
+      bodyHtml,
+      logoUrl,
+    }),
+    text: `A new listing has gone live on ${BRAND.name}.\n\n${listing.title} — ${price}\nSeller: ${seller}\n\nReview: ${adminUrl}\nView: ${listingUrl}`,
+  };
+}
+
+module.exports = { verificationEmail, passwordResetEmail, securityAlertEmail, newListingAdminEmail };

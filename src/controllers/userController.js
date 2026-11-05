@@ -4,7 +4,7 @@ const catchAsync = require('../utils/catchAsync');
 const { sendSuccess } = require('../utils/response');
 const userService    = require('../services/userService');
 const reviewService  = require('../services/reviewService');
-const { ukPostcode, ukPhone, fullName } = require('../validators/addressValidators');
+const { ukPostcode, ukPhone, firstName, lastName } = require('../validators/addressValidators');
 
 function validate(schema, data) {
   const result = schema.safeParse(data);
@@ -39,7 +39,8 @@ const postageSchema = z.object({
 });
 
 const addressSchema = z.object({
-  full_name: fullName,
+  first_name: firstName,
+  last_name:  lastName,
   phone:     ukPhone,
   line1:     z.string().trim().min(1, 'Address line 1 is required').max(100),
   line2:     z.string().trim().max(100).optional(),
@@ -126,8 +127,10 @@ const updatePostageSettings = catchAsync(async (req, res) => {
 
 // PUT /api/users/settings/address
 const updateAddress = catchAsync(async (req, res) => {
-  const { full_name, phone, line1, line2, city, postcode } = validate(addressSchema, req.body);
-  const user = await userService.updateAddress(req.user.id, { fullName: full_name, phone, line1, line2, city, postcode });
+  const { first_name, last_name, phone, line1, line2, city, postcode } = validate(addressSchema, req.body);
+  const user = await userService.updateAddress(req.user.id, {
+    firstName: first_name, lastName: last_name, phone, line1, line2, city, postcode,
+  });
   sendSuccess(res, 200, { user });
 });
 

@@ -8,12 +8,12 @@ const { moovRequest } = require('../lib/moov');
 
 // Moov's own sample addresses from the Postman collection.
 const SAMPLE_FROM = {
-  name: 'Kit Loop Test', phone: '07000000000', email: '', company_name: '',
+  name: 'The Kit Loop Test', phone: '07000000000', email: '', company_name: '',
   address_1: '2 Infirmary Street', address_2: '', address_3: '',
   city: 'Leeds', county: '', postcode: 'LS1 2JP', country_iso: 'GB',
 };
 const SAMPLE_TO = {
-  name: 'Kit Loop Test', phone: '07000000000', email: '', company_name: null,
+  name: 'The Kit Loop Test', phone: '07000000000', email: '', company_name: null,
   address_1: '9 Mellor Meadows', address_2: 'Whittington', address_3: '',
   city: 'Oswestry', county: 'Shropshire', postcode: 'SY11 4FN', country_iso: 'GB',
 };

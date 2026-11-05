@@ -24,7 +24,6 @@ const VARIANT_SUBCATEGORY_ALIASES = {
   'Badminton|Shuttlecock': 'Badminton shuttlecocks',
   'Boxing & MMA|Boxing gloves (pair)': 'Boxing gloves',
   'Cycling|Cycling shoes (pair)': 'Cycling shoes',
-  'Netball|Knee pads (pair)': 'Netball knee pads',
   'Swimming|Racing suit / wetsuit': 'Swimming costume',
   'American Football|Football (ball)': 'Am. Football',
   'American Football|Football helmet': 'Am. Football helmet',

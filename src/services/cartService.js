@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
-const { getFeeValue } = require('./checkoutService');
+const { getBuyerProtectionConfig, calcBuyerProtection, getAgreedPrices } = require('./checkoutService');
 
 // Pre-loved items are one-offs, and the whole cart is paid in one Stripe charge,
 // so keep the cart a sensible size.
@@ -33,20 +33,22 @@ function unavailableReason(listing, userId) {
 }
 
 // Totals use the same fee settings and per-item rounding as checkout, so the
-// cart total matches the amount charged.
+// cart total matches the amount charged. An accepted offer replaces the listed price.
 async function summarise(items) {
-  const buyerProtectionPct = await getFeeValue('buyer_protection_fee_percentage');
+  const buyerProtectionConfig = await getBuyerProtectionConfig();
   const available = items.filter((i) => i.isAvailable);
-  const itemsTotal = available.reduce((t, i) => t + Number(i.listing.price), 0);
+  const priceOf = (i) => Number(i.agreedPrice ?? i.listing.price);
+  const itemsTotal = available.reduce((t, i) => t + priceOf(i), 0);
   const postageTotal = available.reduce((t, i) => t + Number(i.listing.shippingFee), 0);
-  const buyerProtection = available.reduce((t, i) => t + money(Number(i.listing.price) * buyerProtectionPct), 0);
+  const buyerProtection = available.reduce((t, i) => t + calcBuyerProtection(priceOf(i), buyerProtectionConfig), 0);
   return {
     count: items.length,
     availableCount: available.length,
     itemsTotal: money(itemsTotal),
     postageTotal: money(postageTotal),
     buyerProtectionTotal: money(buyerProtection),
-    buyerProtectionPercentage: buyerProtectionPct,
+    buyerProtectionPercentage: buyerProtectionConfig.percentage,
+    buyerProtectionFlat: buyerProtectionConfig.flat,
     total: money(itemsTotal + postageTotal + buyerProtection),
   };
 }
@@ -66,6 +68,7 @@ async function getCart(userId) {
       })
     : [];
   const favouriteIds = new Set(favourites.map((f) => f.listingId));
+  const agreedPrices = await getAgreedPrices(userId, rows.map((r) => r.listing.id));
 
   const items = rows.map((r) => {
     const reason = unavailableReason(r.listing, userId);
@@ -76,6 +79,7 @@ async function getCart(userId) {
       isAvailable: !reason,
       unavailableReason: reason,
       isFavourited: favouriteIds.has(r.listing.id),
+      agreedPrice: agreedPrices.has(r.listing.id) ? Number(agreedPrices.get(r.listing.id).counterAmount) : null,
       listing: { ...r.listing, seller },
     };
   });

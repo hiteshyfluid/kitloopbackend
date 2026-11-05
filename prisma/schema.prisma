@@ -203,6 +203,9 @@ enum NotificationType {
   payout_initiated
   payout_completed
   price_drop
+  listing_uploaded
+  offer_accepted
+  offer_declined
 }
 
 enum AdminActionType {
@@ -226,6 +229,16 @@ enum AdminActionType {
   integration_settings_updated
   integration_settings_tested
   integration_mode_changed
+  brand_added
+  brand_edited
+  content_updated
+  blog_post_saved
+  blog_post_deleted
+}
+
+enum BlogPostStatus {
+  draft
+  published
 }
 
 enum BadgeAction {
@@ -309,6 +322,8 @@ model User {
   defaultParcelSize          ParcelSize?   @map("default_parcel_size")
   // Private contact / ship-from address — used as the sender on courier labels
   fullName                   String?       @map("full_name") @db.VarChar(100)
+  firstName                  String?       @map("first_name") @db.VarChar(50)
+  lastName                   String?       @map("last_name") @db.VarChar(50)
   phone                      String?       @db.VarChar(20)
   addressLine1               String?       @map("address_line1") @db.VarChar(100)
   addressLine2               String?       @map("address_line2") @db.VarChar(100)
@@ -345,6 +360,9 @@ model User {
   feeConfigUpdatedBy         FeeConfig[]
   siteSettingsUpdatedBy      SiteSetting[]
   sessions                   Session[]
+  brandsCreated              Brand[]
+  blogPosts                  BlogPost[]
+  cmsPagesUpdated            CmsPage[]
 
   @@index([accountStatus], map: "idx_users_account_status")
   @@index([role], map: "idx_users_role")
@@ -389,6 +407,7 @@ model Sport {
   subCategories            SubCategory[]
   listings                 Listing[]
   feeConfigs               FeeConfig[]
+  brandCategories          BrandCategory[]
 
   @@index([status], map: "idx_sports_status")
   @@index([displayOrder], map: "idx_sports_display_order")
@@ -412,6 +431,7 @@ model SubCategory {
   sport                   Sport            @relation(fields: [sportId], references: [id], onDelete: Restrict)
   listings                Listing[]
   variantOptions          VariantOption[]
+  brandCategories         BrandCategory[]
 
   @@unique([sportId, slug], map: "idx_subcat_sport_slug")
   @@index([sportId], map: "idx_subcat_sport_id")
@@ -426,14 +446,39 @@ model Brand {
   logoUrl                 String?          @map("logo_url")
   status                  VisibilityStatus @default(active)
   displayOrder            Int              @default(0) @map("display_order")
+  // Set when a seller typed the brand in by hand rather than picking it
+  createdById             String?          @map("created_by") @db.Uuid
   createdAt               DateTime         @default(now()) @map("created_at")
   updatedAt               DateTime         @updatedAt @map("updated_at")
 
   // Relations
   listings                Listing[]
+  categories              BrandCategory[]
+  createdBy               User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([status], map: "idx_brands_status")
   @@map("brands")
+}
+
+// Which sports (and optionally which sub-categories) a brand makes kit for.
+// A row with no sub-category covers the whole sport. Drives the brand
+// dropdown on the sell form so golf brands don't show under cricket.
+model BrandCategory {
+  id                      String           @id @default(uuid()) @db.Uuid
+  brandId                 String           @map("brand_id") @db.Uuid
+  sportId                 String           @map("sport_id") @db.Uuid
+  subCategoryId           String?          @map("sub_category_id") @db.Uuid
+  createdAt               DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  brand                   Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  sport                   Sport            @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  subCategory             SubCategory?     @relation(fields: [subCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([brandId], map: "idx_brand_categories_brand_id")
+  @@index([sportId], map: "idx_brand_categories_sport_id")
+  @@index([subCategoryId], map: "idx_brand_categories_subcat_id")
+  @@map("brand_categories")
 }
 
 model Listing {
@@ -678,6 +723,9 @@ model Message {
   messageType              MessageType   @default(text) @map("message_type")
   body                     String?
   offerAmount              Decimal?      @map("offer_amount") @db.Decimal(10, 2)
+  // Buyer offers only: the seller's answer (null = awaiting a response)
+  offerStatus              CounterOfferStatus? @map("offer_status")
+  offerRespondedAt         DateTime?     @map("offer_responded_at")
   isRead                   Boolean       @default(false) @map("is_read")
   isBlocked                Boolean       @default(false) @map("is_blocked")
   blockReason              String?       @map("block_reason")
@@ -966,4 +1014,85 @@ model IntegrationSetting {
 
   @@unique([provider, environment], map: "uq_integration_settings_provider_env")
   @@map("integration_settings")
+}
+
+// ─── CONTENT ───
+
+// Editable static pages (How it works, Shipping, …) managed from the admin panel.
+model CmsPage {
+  id              String    @id @default(uuid()) @db.Uuid
+  slug            String    @unique @db.VarChar(80)
+  title           String    @db.VarChar(150)
+  content         String    @default("")
+  metaTitle       String?   @map("meta_title") @db.VarChar(150)
+  metaDescription String?   @map("meta_description") @db.VarChar(300)
+  updatedById     String?   @map("updated_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  updatedBy       User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("cms_pages")
+}
+
+model BlogCategory {
+  id          String     @id @default(uuid()) @db.Uuid
+  name        String     @unique @db.VarChar(80)
+  slug        String     @unique @db.VarChar(80)
+  description String?    @db.VarChar(300)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  posts       BlogPost[]
+
+  @@map("blog_categories")
+}
+
+model BlogTag {
+  id        String        @id @default(uuid()) @db.Uuid
+  name      String        @unique @db.VarChar(60)
+  slug      String        @unique @db.VarChar(60)
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  posts     BlogPostTag[]
+
+  @@map("blog_tags")
+}
+
+model BlogPost {
+  id              String         @id @default(uuid()) @db.Uuid
+  title           String         @db.VarChar(200)
+  slug            String         @unique @db.VarChar(200)
+  excerpt         String?        @db.VarChar(500)
+  content         String         @default("")
+  coverImageUrl   String?        @map("cover_image_url")
+  status          BlogPostStatus @default(draft)
+  publishedAt     DateTime?      @map("published_at")
+  metaTitle       String?        @map("meta_title") @db.VarChar(150)
+  metaDescription String?        @map("meta_description") @db.VarChar(300)
+  viewCount       Int            @default(0) @map("view_count")
+  authorId        String?        @map("author_id") @db.Uuid
+  categoryId      String?        @map("category_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  author          User?          @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  category        BlogCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags            BlogPostTag[]
+
+  @@index([status, publishedAt(sort: Desc)], map: "idx_blog_posts_status_published")
+  @@index([categoryId], map: "idx_blog_posts_category_id")
+  @@map("blog_posts")
+}
+
+model BlogPostTag {
+  postId    String   @map("post_id") @db.Uuid
+  tagId     String   @map("tag_id") @db.Uuid
+
+  post      BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag       BlogTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId], map: "idx_blog_post_tags_tag_id")
+  @@map("blog_post_tags")
 }

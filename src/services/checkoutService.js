@@ -6,8 +6,10 @@ const { notifyOrderPlaced } = require('./notificationService');
 const { ensureStripeCustomer } = require('./paymentService');
 
 // ─── Fee defaults (used if fee_config rows are absent) ───────────────────────
+// Percentages are stored as fractions (0.07 = 7 %).
 const FEE_DEFAULTS = {
-  buyer_protection_fee_percentage: 0.05,   // 5 %
+  buyer_protection_fee_percentage: 0.07,   // 7 %
+  buyer_protection_fee_flat: 1.00,         // + £1.00 per order
   platform_commission_percentage: 0.10,   // 10 %
   dispute_window_days: 3,
 };
@@ -15,6 +17,40 @@ const FEE_DEFAULTS = {
 async function getFeeValue(key) {
   const row = await prisma.feeConfig.findUnique({ where: { configKey: key } });
   return row ? Number(row.configValue) : FEE_DEFAULTS[key];
+}
+
+// Buyer protection = a percentage of the (agreed) item price plus a flat fee.
+async function getBuyerProtectionConfig() {
+  const [percentage, flat] = await Promise.all([
+    getFeeValue('buyer_protection_fee_percentage'),
+    getFeeValue('buyer_protection_fee_flat'),
+  ]);
+  return { percentage, flat };
+}
+
+function calcBuyerProtection(itemPrice, { percentage, flat }) {
+  return Number((Number(itemPrice) * percentage + flat).toFixed(2));
+}
+
+// Accepted offers / counter offers whose price lock is still open, keyed by
+// listing id — the buyer pays the agreed price for these instead of the listed one.
+async function getAgreedPrices(buyerId, listingIds) {
+  if (!buyerId || !listingIds.length) return new Map();
+  const rows = await prisma.counterOffer.findMany({
+    where: {
+      buyerId,
+      listingId: { in: listingIds },
+      status: 'accepted',
+      checkoutPriceLockExpiresAt: { gt: new Date() },
+    },
+    orderBy: { acceptedAt: 'desc' },
+    select: { id: true, listingId: true, counterAmount: true, originalPrice: true, checkoutPriceLockExpiresAt: true },
+  });
+  const map = new Map();
+  for (const row of rows) {
+    if (!map.has(row.listingId)) map.set(row.listingId, row);
+  }
+  return map;
 }
 
 // ─── In-memory checkout session store (15-min TTL) ───────────────────────────
@@ -69,16 +105,23 @@ async function initiateCheckout(listingId, buyerId, counterOfferId = null) {
     }
     itemPrice = Number(co.counterAmount);
     resolvedCounterOfferId = co.id;
+  } else {
+    // "Buy now" after the seller accepted this buyer's offer still gets the agreed price
+    const agreed = (await getAgreedPrices(buyerId, [listingId])).get(listingId);
+    if (agreed) {
+      itemPrice = Number(agreed.counterAmount);
+      resolvedCounterOfferId = agreed.id;
+    }
   }
 
   // Fetch fee configuration
-  const [buyerProtectionPct, commissionPct] = await Promise.all([
-    getFeeValue('buyer_protection_fee_percentage'),
+  const [buyerProtection, commissionPct] = await Promise.all([
+    getBuyerProtectionConfig(),
     getFeeValue('platform_commission_percentage'),
   ]);
 
   const shippingFee        = Number(listing.shippingFee);
-  const buyerProtectionFee = Number((itemPrice * buyerProtectionPct).toFixed(2));
+  const buyerProtectionFee = calcBuyerProtection(itemPrice, buyerProtection);
   const platformCommission = Number((itemPrice * commissionPct).toFixed(2));
   const totalAmount        = Number((itemPrice + shippingFee + buyerProtectionFee).toFixed(2));
   const sellerNetAmount    = Number((itemPrice - platformCommission).toFixed(2));
@@ -89,6 +132,7 @@ async function initiateCheckout(listingId, buyerId, counterOfferId = null) {
     buyerId,
     sellerId: listing.sellerId,
     counterOfferId: resolvedCounterOfferId,
+    originalPrice: Number(listing.price),
     listing: {
       id: listing.id,
       title: listing.title,
@@ -135,19 +179,23 @@ async function initiateCartCheckout(buyerId) {
     throw new AppError('Your cart has no items available to buy', 409, 'CART_EMPTY');
   }
 
-  const [buyerProtectionPct, commissionPct] = await Promise.all([
-    getFeeValue('buyer_protection_fee_percentage'),
+  const [buyerProtection, commissionPct, agreedPrices] = await Promise.all([
+    getBuyerProtectionConfig(),
     getFeeValue('platform_commission_percentage'),
+    getAgreedPrices(buyerId, available.map((r) => r.listing.id)),
   ]);
 
   const items = available.map(({ listing }) => {
-    const itemPrice          = Number(listing.price);
+    const agreed             = agreedPrices.get(listing.id);
+    const itemPrice          = agreed ? Number(agreed.counterAmount) : Number(listing.price);
     const shippingFee        = Number(listing.shippingFee);
-    const buyerProtectionFee = Number((itemPrice * buyerProtectionPct).toFixed(2));
+    const buyerProtectionFee = calcBuyerProtection(itemPrice, buyerProtection);
     const platformCommission = Number((itemPrice * commissionPct).toFixed(2));
     return {
       listingId: listing.id,
       sellerId: listing.sellerId,
+      counterOfferId: agreed?.id ?? null,
+      originalPrice: Number(listing.price),
       listing: {
         id: listing.id,
         title: listing.title,
@@ -269,8 +317,8 @@ async function createPaymentIntent(sessionId, buyerId) {
     capture_method: 'automatic',
     metadata,
     description: session.type === 'cart'
-      ? `Kit Loop purchase: ${session.items.length} item${session.items.length === 1 ? '' : 's'}`
-      : `Kit Loop purchase: ${session.listing.title}`,
+      ? `The Kit Loop purchase: ${session.items.length} item${session.items.length === 1 ? '' : 's'}`
+      : `The Kit Loop purchase: ${session.listing.title}`,
   });
 
   session.paymentIntentId = pi.id;
@@ -478,7 +526,7 @@ async function confirmCartOrder(session, buyerId, pi) {
             deliveryPostcode:     addr.postcode,
             deliveryName:         addr.name ?? null,
             deliveryPhone:        addr.phone ?? null,
-            agreedPrice:          null,
+            agreedPrice:          item.counterOfferId ? item.itemPrice : null,
             snapshotListingTitle: item.listing.title,
             snapshotCondition:    item.listing.condition,
             snapshotPhotos:       item.listing.photos,
@@ -506,6 +554,12 @@ async function confirmCartOrder(session, buyerId, pi) {
             payoutStatus:          null,
           },
         });
+
+        // An accepted offer has been used — close it and its thread
+        if (item.counterOfferId) {
+          const co = await tx.counterOffer.findUnique({ where: { id: item.counterOfferId }, select: { offerId: true } });
+          if (co) await tx.offer.updateMany({ where: { id: co.offerId }, data: { status: 'completed' } });
+        }
 
         created.push(order);
       }
@@ -552,6 +606,9 @@ function loadOrders(ids) {
 
 module.exports = {
   getFeeValue,
+  getBuyerProtectionConfig,
+  calcBuyerProtection,
+  getAgreedPrices,
   initiateCartCheckout,
   initiateCheckout,
   getCheckoutSession,

@@ -6,6 +6,8 @@ const { initiateCheckout } = require('./checkoutService');
 const MSG_PAGE_SIZE       = 30;
 const COUNTER_TTL_MS      = 24 * 60 * 60 * 1000;       // 24 hours
 const PRICE_LOCK_MS       = 30 * 60 * 1000;             // 30 minutes
+// How long the buyer keeps the agreed price after the seller accepts their offer
+const ACCEPTED_OFFER_LOCK_MS = 48 * 60 * 60 * 1000;     // 48 hours
 
 // ─── Shared selects ───────────────────────────────────────────────────────────
 
@@ -40,6 +42,8 @@ const MSG_SELECT = {
   messageType: true,
   body: true,
   offerAmount: true,
+  offerStatus: true,
+  offerRespondedAt: true,
   isRead: true,
   createdAt: true,
   counterOffer: {
@@ -129,10 +133,16 @@ async function getMyThreads(userId, { page = 1, pageSize = 20, unreadOnly = fals
     return {
       id: offer.id,
       status: offer.status,
+      // The conversation view needs these to know which side the viewer is on
+      buyerId:  offer.buyerId,
+      sellerId: offer.sellerId,
+      buyer:    { id: offer.buyer.id, username: offer.buyer.username, displayName: offer.buyer.displayName },
+      seller:   { id: offer.seller.id, username: offer.seller.username, displayName: offer.seller.displayName },
       listing: {
         id:        listing.id,
         title:     listing.title,
         photo:     (listing.photos ?? [])[0] ?? null,
+        photos:    listing.photos ?? [],
         condition: listing.condition,
         price:     listing.price,
       },
@@ -182,7 +192,7 @@ async function getThreadDetail(offerId, userId) {
 async function getMessages(offerId, userId, before = null) {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
-    select: { id: true, buyerId: true, sellerId: true },
+    select: { id: true, buyerId: true, sellerId: true, listingId: true },
   });
 
   if (!offer) throw new AppError('Thread not found', 404, 'NOT_FOUND');
@@ -209,7 +219,20 @@ async function getMessages(offerId, userId, before = null) {
   const hasMore = raw.length > MSG_PAGE_SIZE;
   const messages = raw.slice(0, MSG_PAGE_SIZE).reverse(); // ascending for display
 
-  return { messages, hasMore };
+  return { messages, hasMore, agreedPrice: await getAgreedPrice(offer.listingId, offer.buyerId) };
+}
+
+// The price this thread's buyer currently pays, if an offer / counter offer was
+// accepted and its price lock is still open. Only that buyer sees it.
+async function getAgreedPrice(listingId, buyerId) {
+  const co = await prisma.counterOffer.findFirst({
+    where: { listingId, buyerId, status: 'accepted', checkoutPriceLockExpiresAt: { gt: new Date() } },
+    orderBy: { acceptedAt: 'desc' },
+    select: { id: true, counterAmount: true, originalPrice: true, checkoutPriceLockExpiresAt: true },
+  });
+  return co
+    ? { counterOfferId: co.id, amount: co.counterAmount, originalPrice: co.originalPrice, expiresAt: co.checkoutPriceLockExpiresAt }
+    : null;
 }
 
 // ─── 5. sendMessage ───────────────────────────────────────────────────────────
@@ -218,7 +241,7 @@ async function sendMessage(offerId, senderId, body, offerAmount) {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     include: {
-      listing: { select: { id: true, status: true, title: true } },
+      listing: { select: { id: true, status: true, title: true, price: true } },
       seller:  { select: { id: true, accountStatus: true } },
       buyer:   { select: { id: true, accountStatus: true } },
     },
@@ -237,6 +260,17 @@ async function sendMessage(offerId, senderId, body, offerAmount) {
   if (offerAmount && offer.listing.status !== 'live') {
     throw new AppError('This item is no longer available', 410, 'LISTING_SOLD');
   }
+  // Sellers answer with a counter offer instead
+  if (offerAmount && !isBuyer) {
+    throw new AppError('Only the buyer can make an offer — send a counter offer instead', 403, 'NOT_THREAD_BUYER');
+  }
+  if (offerAmount && Number(offerAmount) > Number(offer.listing.price)) {
+    throw new AppError(
+      `Your offer can't be more than the listed price of £${Number(offer.listing.price).toFixed(2)}`,
+      400,
+      'EXCEEDS_LISTED_PRICE'
+    );
+  }
 
   // Validate the other party hasn't been suspended (no messaging into frozen threads)
   const otherParty = isBuyer ? offer.seller : offer.buyer;
@@ -248,7 +282,14 @@ async function sendMessage(offerId, senderId, body, offerAmount) {
   const preview     = makePreview(messageType, body, offerAmount);
   const now         = new Date();
 
-  const [message] = await prisma.$transaction([
+  const [, message] = await prisma.$transaction([
+    // A new offer replaces any earlier one the seller hasn't answered yet
+    prisma.message.updateMany({
+      where: messageType === 'offer'
+        ? { offerId, messageType: 'offer', offerStatus: 'pending' }
+        : { id: { in: [] } },
+      data: { offerStatus: 'expired', offerRespondedAt: now },
+    }),
     prisma.message.create({
       data: {
         offerId,
@@ -256,6 +297,7 @@ async function sendMessage(offerId, senderId, body, offerAmount) {
         messageType,
         body:        body ?? null,
         offerAmount: offerAmount ?? null,
+        offerStatus: messageType === 'offer' ? 'pending' : null,
       },
       select: MSG_SELECT,
     }),
@@ -488,7 +530,148 @@ async function declineCounterOffer(counterOfferId, buyerId) {
   return updated;
 }
 
+// ─── 9. respondToOffer (seller accepts / declines a buyer's offer) ────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function loadOfferMessageForSeller(offerId, messageId, sellerId) {
+  if (!UUID_RE.test(offerId) || !UUID_RE.test(messageId)) throw new AppError('Offer not found', 404, 'NOT_FOUND');
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    include: {
+      offer: {
+        include: {
+          listing: { select: { id: true, title: true, price: true, status: true } },
+          buyer:   { select: { id: true, accountStatus: true } },
+        },
+      },
+    },
+  });
+
+  if (!message || message.offerId !== offerId || message.messageType !== 'offer') {
+    throw new AppError('Offer not found', 404, 'NOT_FOUND');
+  }
+  if (message.offer.sellerId !== sellerId) throw new AppError('Forbidden', 403, 'NOT_THREAD_SELLER');
+  if (message.offerStatus && message.offerStatus !== 'pending') {
+    throw new AppError(`This offer has already been ${message.offerStatus}`, 409, 'NOT_PENDING');
+  }
+  return message;
+}
+
+async function postSystemMessage(tx, offerId, senderId, body) {
+  const msg = await tx.message.create({
+    data: { offerId, senderId, messageType: 'system', body },
+    select: { createdAt: true },
+  });
+  // System messages come from the seller's action and are for the buyer
+  await tx.offer.update({
+    where: { id: offerId },
+    data: {
+      lastMessageAt:      msg.createdAt,
+      lastMessagePreview: body.slice(0, 60),
+      sellerUnreadCount:  0,
+      buyerUnreadCount:   { increment: 1 },
+    },
+  });
+}
+
+async function acceptOffer(offerId, messageId, sellerId) {
+  const message = await loadOfferMessageForSeller(offerId, messageId, sellerId);
+  const { offer } = message;
+
+  if (offer.listing.status !== 'live') {
+    throw new AppError('This item is no longer available', 410, 'LISTING_UNAVAILABLE');
+  }
+  if (offer.buyer.accountStatus !== 'active') {
+    throw new AppError('This buyer is currently unavailable', 403, 'BUYER_UNAVAILABLE');
+  }
+
+  const amount        = Number(message.offerAmount);
+  const listingPrice  = Number(offer.listing.price);
+  const now           = new Date();
+  const lockExpiresAt = new Date(now.getTime() + ACCEPTED_OFFER_LOCK_MS);
+
+  // The accepted offer is stored as an accepted counter offer at the buyer's
+  // amount, so checkout and the cart price-lock it exactly like a counter offer.
+  const counterOffer = await prisma.$transaction(async (tx) => {
+    // Only one agreed price per buyer per listing: retire earlier ones
+    await tx.counterOffer.updateMany({
+      where: { offerId, status: { in: ['pending', 'accepted'] } },
+      data:  { status: 'unavailable' },
+    });
+
+    await tx.message.update({
+      where: { id: messageId },
+      data:  { offerStatus: 'accepted', offerRespondedAt: now },
+    });
+
+    const co = await tx.counterOffer.create({
+      data: {
+        offerId,
+        messageId,
+        sellerId,
+        buyerId:       offer.buyerId,
+        listingId:     offer.listingId,
+        counterAmount: amount,
+        originalPrice: listingPrice,
+        status:        'accepted',
+        expiresAt:     lockExpiresAt,
+        acceptedAt:    now,
+        checkoutPriceLockExpiresAt: lockExpiresAt,
+      },
+    });
+
+    await postSystemMessage(
+      tx, offerId, sellerId,
+      `Offer of £${amount.toFixed(2)} accepted. The price is now £${amount.toFixed(2)} for you for the next 48 hours.`,
+    );
+    return co;
+  });
+
+  notify(
+    offer.buyerId,
+    'offer_accepted',
+    'Your offer was accepted!',
+    `The seller accepted your offer of £${amount.toFixed(2)} on "${offer.listing.title}". Buy it now at the new price, held for you for 48 hours.`,
+    offer.listingId,
+    'listing'
+  ).catch((e) => console.error('[notify] offer_accepted:', e.message));
+
+  return {
+    offerStatus: 'accepted',
+    agreedPrice: { counterOfferId: counterOffer.id, amount, originalPrice: listingPrice, expiresAt: lockExpiresAt },
+  };
+}
+
+async function declineOffer(offerId, messageId, sellerId) {
+  const message = await loadOfferMessageForSeller(offerId, messageId, sellerId);
+  const { offer } = message;
+  const amount = Number(message.offerAmount);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.message.update({
+      where: { id: messageId },
+      data:  { offerStatus: 'declined', offerRespondedAt: new Date() },
+    });
+    await postSystemMessage(tx, offerId, sellerId, `Offer of £${amount.toFixed(2)} declined.`);
+  });
+
+  notify(
+    offer.buyerId,
+    'offer_declined',
+    'Offer declined',
+    `The seller declined your offer of £${amount.toFixed(2)} on "${offer.listing.title}".`,
+    offerId,
+    'offer'
+  ).catch((e) => console.error('[notify] offer_declined:', e.message));
+
+  return { offerStatus: 'declined' };
+}
+
 module.exports = {
+  acceptOffer,
+  declineOffer,
+  getAgreedPrice,
   getOrCreateThread,
   getMyThreads,
   getThreadDetail,

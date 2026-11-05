@@ -231,7 +231,8 @@ async function seedUsers(passwordHash) {
 
 async function seedFeeConfig(adminId) {
   const defaults = [
-    { configKey: 'buyer_protection_fee_percentage', configValue: 0.05, configType: 'percentage', description: 'Buyer protection fee (5 %)' },
+    { configKey: 'buyer_protection_fee_percentage', configValue: 0.07, configType: 'percentage', description: 'Buyer protection fee — percentage of the item price (7 %)' },
+    { configKey: 'buyer_protection_fee_flat',       configValue: 1.00, configType: 'flat_amount', description: 'Buyer protection fee — flat amount added to every order (£1.00)' },
     { configKey: 'platform_commission_percentage',  configValue: 0.10, configType: 'percentage', description: 'Platform commission (10 %)' },
     { configKey: 'dispute_window_days',             configValue: 3,    configType: 'flat_amount', description: 'Days after delivery buyer can raise a dispute' },
   ];

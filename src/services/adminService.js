@@ -951,21 +951,31 @@ async function listFeeConfigs() {
   });
 }
 
+// Percentage configs are stored as fractions (0.07 = 7 %)
 const FEE_CONFIG_MAX = {
-  buyer_protection:    20,
-  platform_commission: 30,
+  buyer_protection_fee_percentage: 0.20,
+  platform_commission_percentage:  0.30,
+  buyer_protection_fee_flat:       10,
 };
+
+// Flat amounts that may legitimately be switched off
+const FEE_CONFIG_ZERO_ALLOWED = ['buyer_protection_fee_flat'];
 
 async function updateFeeConfig(configId, adminId, { configValue, internalNote } = {}) {
   const config = await prisma.feeConfig.findUnique({ where: { id: configId } });
   if (!config) throw new AppError('Fee config not found', 404, 'NOT_FOUND');
 
+  const label = config.configKey.replace(/_/g, ' ');
   const max = FEE_CONFIG_MAX[config.configKey];
   if (max !== undefined && Number(configValue) > max) {
-    throw new AppError(`${config.configKey.replace(/_/g, ' ')} cannot exceed ${max}%`, 400, 'VALIDATION_ERROR');
+    const shown = config.configType === 'percentage' ? `${max * 100}%` : `£${max.toFixed(2)}`;
+    throw new AppError(`${label} cannot exceed ${shown}`, 400, 'VALIDATION_ERROR');
   }
-  if (config.configType === 'flat_amount' && Number(configValue) <= 0) {
-    throw new AppError('Shipping fee must be greater than £0.00', 400, 'VALIDATION_ERROR');
+  if (config.configType === 'percentage' && Number(configValue) > 1) {
+    throw new AppError('Percentages are stored as fractions — e.g. 0.07 for 7%', 400, 'VALIDATION_ERROR');
+  }
+  if (config.configType === 'flat_amount' && Number(configValue) <= 0 && !FEE_CONFIG_ZERO_ALLOWED.includes(config.configKey)) {
+    throw new AppError(`${label} must be greater than 0`, 400, 'VALIDATION_ERROR');
   }
 
   const updated = await prisma.$transaction(async (tx) => {

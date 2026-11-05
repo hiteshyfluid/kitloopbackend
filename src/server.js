@@ -21,6 +21,7 @@ process.on('uncaughtException', (err) => {
 
 const server = app.listen(PORT, () => {
   console.log(`The Kit Loop API running on port ${PORT}`);
+  prisma.connectWithRetry();
   startAutoReleaseJob();
   startCounterOfferExpiryJob();
   startDisputeEscalationJob();

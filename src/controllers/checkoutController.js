@@ -23,9 +23,10 @@ const addressSchema = z.object({
   line2:    z.string().trim().max(100).optional(),
   city:     z.string().trim().min(1, 'City is required').max(60),
   postcode: z.string().trim().min(1, 'Postcode is required').max(10),
-  // Recipient contact for the courier — optional until the checkout form collects it
+  // Recipient contact for the courier. The phone is required — it is only used
+  // for delivery updates, never marketing.
   full_name: fullName.optional(),
-  phone:     ukPhone.optional(),
+  phone:     z.string({ error: 'Phone number is required' }).trim().min(1, 'Phone number is required').pipe(ukPhone),
 });
 
 const confirmSchema = z.object({

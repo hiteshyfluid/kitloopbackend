@@ -25,7 +25,14 @@ const requireAuth = catchAsync(async (req, res, next) => {
     throw new AppError('Invalid or expired token', 401, 'UNAUTHORIZED');
   }
 
-  const session = await prisma.session.findUnique({ where: { id: decoded.sid } });
+  // A token minted before session ids were UUIDs (or a malformed one) is a
+  // stale login, not a server fault.
+  const session = await prisma.session
+    .findUnique({ where: { id: decoded.sid } })
+    .catch((err) => {
+      if (err.code === 'P2007') return null;
+      throw err;
+    });
   const now = new Date();
 
   if (

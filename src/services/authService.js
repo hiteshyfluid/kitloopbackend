@@ -1,7 +1,5 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const nodemailer = require('nodemailer');
-const { Resend } = require('resend');
 const { OAuth2Client } = require('google-auth-library');
 const jwksClient = require('jwks-rsa');
 const jwt = require('jsonwebtoken');
@@ -13,6 +11,7 @@ const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { signToken } = require('../utils/jwt');
 const emailTemplates = require('../templates/emailTemplates');
+const { sendEmail, getEmailLogoUrl, clientUrl } = require('./emailService');
 
 const SALT_ROUNDS = 12;
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -23,17 +22,8 @@ const EMAIL_OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_EMAIL_OTP_ATTEMPTS = 5;
 const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000;
 const SMS_CODE_EXPIRY_MS = 10 * 60 * 1000;
-const TWO_FACTOR_ISSUER = 'Kit Loop';
+const TWO_FACTOR_ISSUER = 'The Kit Loop';
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const gmailUser = process.env.GMAIL_USER;
-const gmailPass = process.env.GMAIL_APP_PASSWORD;
-const gmailTransporter = gmailUser && gmailPass
-  ? nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: gmailUser, pass: gmailPass },
-    })
-  : null;
 const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
 const appleJwksClient = jwksClient({ jwksUri: 'https://appleid.apple.com/auth/keys' });
 
@@ -168,39 +158,6 @@ async function createSession(userId, meta = {}) {
   return { token, session };
 }
 
-// ─── Email sending (Gmail SMTP, then Resend, then console) ───
-
-async function sendEmail({ to, subject, html, text }) {
-  const from = process.env.EMAIL_FROM
-    || (gmailUser ? `Kit Loop <${gmailUser}>` : 'Kit Loop <no-reply@kitloop.app>');
-
-  if (gmailTransporter) {
-    await gmailTransporter.sendMail({ from, to, subject, html, text });
-    return;
-  }
-
-  if (resend) {
-    const { error } = await resend.emails.send({ from, to, subject, html, text });
-    if (error) throw new Error(`Resend: ${error.message}`);
-    return;
-  }
-
-  console.log(`[email:dev] To: ${to} | Subject: ${subject}\n${text || html}`);
-}
-
-// Logo uploaded in Admin → Branding; emails fall back to a text wordmark
-async function getEmailLogoUrl() {
-  const row = await prisma.siteSetting
-    .findUnique({ where: { settingKey: 'site_logo_url' } })
-    .catch(() => null);
-  const url = row?.settingValue;
-  return typeof url === 'string' && url.startsWith('https://') ? url : null;
-}
-
-function clientUrl() {
-  return (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/$/, '');
-}
-
 // Dev-only fallback — wire up a real SMS provider (e.g. Twilio) before production.
 async function sendSms({ to, body }) {
   console.log(`[sms:dev] To: ${to} | ${body}`);
@@ -322,7 +279,7 @@ async function registerFailedLogin(user) {
     data.lockoutUntil = new Date(now.getTime() + LOCKOUT_DURATION_MS);
     sendSecurityAlertEmail(
       user.email,
-      'Kit Loop security alert: account locked',
+      'The Kit Loop security alert: account locked',
       "Your account has been temporarily locked after 5 failed login attempts. If this wasn't you, reset your password once the lockout ends."
     ).catch((err) => console.error('Failed to send security alert email', err));
   }
@@ -670,7 +627,7 @@ async function changePassword(userId, currentPassword, newPassword, currentSessi
 
   await sendSecurityAlertEmail(
     user.email,
-    'Your Kit Loop password was changed',
+    'Your password for The Kit Loop was changed',
     'Your password was changed. If this was not you, contact support immediately.'
   ).catch((err) => console.error('Failed to send password-change security email', err));
 }
@@ -718,7 +675,7 @@ async function revokeSession(userId, sessionId) {
 
   await sendSecurityAlertEmail(
     (await prisma.user.findUnique({ where: { id: userId } })).email,
-    'A Kit Loop session was revoked',
+    'A session on The Kit Loop was revoked',
     'A session on one of your devices was just revoked. If this was not you, change your password immediately.'
   ).catch((err) => console.error('Failed to send session-revocation security email', err));
 }
@@ -734,7 +691,7 @@ async function issueSmsTwoFactorCode(userId, phone) {
       twoFactorPendingCodeExpires: new Date(Date.now() + SMS_CODE_EXPIRY_MS),
     },
   });
-  await sendSms({ to: phone, body: `Your Kit Loop verification code is ${code}. It expires in 10 minutes.` });
+  await sendSms({ to: phone, body: `Your verification code for The Kit Loop is ${code}. It expires in 10 minutes.` });
 }
 
 function isSmsCodeValid(user, code) {
@@ -854,7 +811,7 @@ async function disableTwoFactor(userId, currentPassword, code) {
   await sendSecurityAlertEmail(
     user.email,
     'Two-factor authentication disabled',
-    'Two-factor authentication was just disabled on your Kit Loop account. If this was not you, contact support immediately.'
+    'Two-factor authentication was just disabled on your account with The Kit Loop. If this was not you, contact support immediately.'
   ).catch((err) => console.error('Failed to send 2FA-disabled security email', err));
 
   return { codeRequired: false };

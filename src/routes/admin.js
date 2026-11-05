@@ -3,6 +3,8 @@
 const { Router } = require('express');
 const requireAdmin = require('../middleware/requireAdmin');
 const ctrl = require('../controllers/adminController');
+const content = require('../controllers/contentController');
+const brands = require('../controllers/brandsController');
 
 const router = Router();
 
@@ -59,5 +61,32 @@ router.patch('/fees/:id',                           ctrl.updateFeeConfig);
 // ─── Site Settings ───────────────────────────────────────────────────────────
 router.get('/settings',                             ctrl.getSiteSettings);
 router.patch('/settings/:key',                      ctrl.updateSiteSetting);
+
+// ─── Brands ──────────────────────────────────────────────────────────────────
+router.get('/brands',                               brands.adminListBrands);
+router.post('/brands',                              brands.adminCreateBrand);
+router.patch('/brands/:id',                         brands.adminUpdateBrand);
+router.delete('/brands/:id',                        brands.adminDeleteBrand);
+
+// ─── Site content & pages ────────────────────────────────────────────────────
+router.get('/content',                              content.adminGetSiteContent);
+router.put('/content',                              content.adminUpdateSiteContent);
+router.get('/pages',                                content.adminListPages);
+router.put('/pages/:slug',                          content.adminSavePage);
+router.delete('/pages/:slug',                       content.adminResetPage);
+
+// ─── Blog ────────────────────────────────────────────────────────────────────
+router.get('/blog/posts',                           content.adminListPosts);
+router.post('/blog/posts',                          content.adminCreatePost);
+router.get('/blog/posts/:id',                       content.adminGetPost);
+router.patch('/blog/posts/:id',                     content.adminUpdatePost);
+router.delete('/blog/posts/:id',                    content.adminDeletePost);
+router.get('/blog/categories',                      content.adminListCategories);
+router.post('/blog/categories',                     content.adminCreateCategory);
+router.patch('/blog/categories/:id',                content.adminUpdateCategory);
+router.delete('/blog/categories/:id',               content.adminDeleteCategory);
+router.get('/blog/tags',                            content.adminListTags);
+router.patch('/blog/tags/:id',                      content.adminRenameTag);
+router.delete('/blog/tags/:id',                     content.adminDeleteTag);
 
 module.exports = router;

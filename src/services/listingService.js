@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { generateOgImage } = require('./cloudinaryService');
 const { textSearchWhere } = require('./searchService');
+const { notifyAdminsNewListing } = require('./notificationService');
 
 // ─── View-count deduplication cache ───────────────────────────────────────────
 // Prevents counting more than one view per user/IP per listing per hour.
@@ -152,11 +153,16 @@ async function publishListing(listingId, sellerId) {
   const photos = Array.isArray(listing.photos) ? listing.photos : [];
   const ogImageUrl = photos.length > 0 ? generateOgImage(photos[0]) : null;
 
-  return prisma.listing.update({
+  const published = await prisma.listing.update({
     where: { id: listingId },
     data: { status: newStatus, publishedAt: new Date(), ogImageUrl },
     select: { id: true, status: true, publishedAt: true, ogImageUrl: true },
   });
+
+  // No pre-approval — admins are just told a new product is up
+  notifyAdminsNewListing(listingId).catch((e) => console.error('[notify] new listing:', e.message));
+
+  return published;
 }
 
 // ─── 3. getListing ────────────────────────────────────────────────────────────
@@ -243,8 +249,19 @@ async function getListing(listingId, requestingUserId, requestIp) {
     isFavourited = !!fav;
   }
 
+  // A seller-accepted offer changes the price for this buyer only
+  let agreedPrice = null;
+  if (requestingUserId && !isOwnListing) {
+    const co = await prisma.counterOffer.findFirst({
+      where: { listingId, buyerId: requestingUserId, status: 'accepted', checkoutPriceLockExpiresAt: { gt: new Date() } },
+      orderBy: { acceptedAt: 'desc' },
+      select: { id: true, counterAmount: true, checkoutPriceLockExpiresAt: true },
+    });
+    if (co) agreedPrice = { counterOfferId: co.id, amount: co.counterAmount, expiresAt: co.checkoutPriceLockExpiresAt };
+  }
+
   const { sellerId, ...listingData } = listing;
-  return { statusCode: 200, listing: { ...listingData, isFavourited } };
+  return { statusCode: 200, listing: { ...listingData, isFavourited, agreedPrice } };
 }
 
 // ─── 4. searchListings ────────────────────────────────────────────────────────

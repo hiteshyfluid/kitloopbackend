@@ -22,7 +22,10 @@ const notificationsRouter = require('./routes/notifications');
 const adminRouter         = require('./routes/admin');
 const integrationSettingsRouter = require('./routes/integrationSettings');
 const configRouter        = require('./routes/config');
+const contentRouter       = require('./routes/content');
 const { toSnakeCase } = require('./utils/caseConvert');
+const prisma = require('./lib/prisma');
+const { isDbConnectionError } = prisma;
 
 const app = express();
 
@@ -43,7 +46,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json());
+// Blog posts and pages are sent as JSON, so allow more than the 100kb default
+app.use(express.json({ limit: '1mb' }));
 // Express 5 leaves req.body undefined when a request has no body (e.g. DELETE /admin/sports/:id).
 // Validators expect an object, as Express 4 provided, so default it here once for every route.
 app.use((req, res, next) => {
@@ -51,17 +55,39 @@ app.use((req, res, next) => {
   next();
 });
 
-const limiter = rateLimit({
+// Behind a load balancer / reverse proxy every request arrives from the proxy's
+// IP, so without this all users share one rate-limit bucket. TRUST_PROXY is the
+// number of proxy hops in front of the app (0 when hit directly).
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? (process.env.NODE_ENV === 'production' ? 1 : 0)));
+
+// Browsing (search, listing pages, polling for unread counts) fires many cheap
+// GETs, so reads and writes get separate buckets — a busy search session must
+// not lock the user out, and it must not use up the allowance for writes.
+const isRead = (req) => req.method === 'GET' || req.method === 'HEAD';
+const rateLimited = (max, skip) => rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 300 : 1000,
+  max,
+  skip,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests — please try again shortly.', code: 'RATE_LIMITED' },
 });
-app.use(limiter);
+const isProd = process.env.NODE_ENV === 'production';
+app.use(rateLimited(Number(process.env.RATE_LIMIT_READ_MAX) || (isProd ? 3000 : 10000), (req) => !isRead(req)));
+app.use(rateLimited(Number(process.env.RATE_LIMIT_WRITE_MAX) || (isProd ? 300 : 1000), isRead));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Readiness — confirms the database answers, for uptime monitors / load balancers
+app.get('/health/db', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'up' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', db: 'down' });
+  }
 });
 
 app.use('/api/auth', authRouter);
@@ -82,6 +108,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/admin/settings/integrations', integrationSettingsRouter);
 app.use('/api/admin',         adminRouter);
 app.use('/api/config',        configRouter);
+app.use('/api',               contentRouter);
 app.use('/api', listingsRouter);
 
 app.use((req, res) => {
@@ -93,6 +120,9 @@ app.use((req, res) => {
 const PRISMA_ERRORS = {
   P2002: { status: 409, code: 'ALREADY_EXISTS', message: 'This record already exists' },
   P2003: { status: 400, code: 'INVALID_REFERENCE', message: 'A referenced record does not exist' },
+  // Malformed value for the column type, e.g. a non-UUID id in the URL
+  P2007: { status: 400, code: 'INVALID_INPUT', message: 'Invalid identifier or value' },
+  P2023: { status: 400, code: 'INVALID_INPUT', message: 'Invalid identifier or value' },
   P2025: { status: 404, code: 'NOT_FOUND', message: 'Record not found' },
 };
 
@@ -110,6 +140,11 @@ function normalizeError(err) {
   if (typeof err.code === 'string' && PRISMA_ERRORS[err.code]) {
     return PRISMA_ERRORS[err.code];
   }
+  // Database briefly unreachable (pooler restart, network blip) — the client
+  // already retried, so tell the caller to try again rather than 500 + stack.
+  if (isDbConnectionError(err)) {
+    return { status: 503, code: 'DB_UNAVAILABLE', message: 'Service temporarily unavailable — please try again' };
+  }
   if (err.name === 'PrismaClientValidationError') {
     return { status: 400, code: 'VALIDATION_ERROR', message: 'Invalid request data' };
   }
@@ -119,6 +154,10 @@ function normalizeError(err) {
 app.use((err, req, res, next) => {
   const known = normalizeError(err);
   if (known) {
+    if (known.code === 'DB_UNAVAILABLE') {
+      console.error(`[${req.method} ${req.originalUrl}] Database unreachable: ${err.message.split('\n').pop()}`);
+      res.set('Retry-After', '5');
+    }
     if (res.headersSent) return next(err);
     return res.status(known.status).json({ success: false, error: known.message, code: known.code });
   }

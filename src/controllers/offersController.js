@@ -110,7 +110,21 @@ const declineCounterOffer = catchAsync(async (req, res) => {
   sendSuccess(res, 200, { counterOffer });
 });
 
+// POST /api/offers/:id/messages/:messageId/accept  (seller)
+const acceptOffer = catchAsync(async (req, res) => {
+  const result = await messageService.acceptOffer(req.params.id, req.params.messageId, req.user.id);
+  sendSuccess(res, 200, result);
+});
+
+// POST /api/offers/:id/messages/:messageId/decline  (seller)
+const declineOffer = catchAsync(async (req, res) => {
+  const result = await messageService.declineOffer(req.params.id, req.params.messageId, req.user.id);
+  sendSuccess(res, 200, result);
+});
+
 module.exports = {
+  acceptOffer,
+  declineOffer,
   getOrCreateThread,
   getMyThreads,
   getThreadDetail,

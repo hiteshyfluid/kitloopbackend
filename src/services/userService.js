@@ -18,7 +18,7 @@ const OWN_PROFILE_SELECT = {
   bankAccountLast4: true, bankSortCodeMasked: true,
   defaultParcelSize: true,
   preferredSports: true,
-  fullName: true, phone: true,
+  fullName: true, firstName: true, lastName: true, phone: true,
   addressLine1: true, addressLine2: true, addressCity: true, addressPostcode: true,
   updatedAt: true,
 };
@@ -101,11 +101,14 @@ async function updatePostagePreference(userId, defaultParcelSize) {
 
 // ─── updateAddress ───────────────────────────────────────────────────────────
 // Contact details + ship-from address used as the sender on courier labels.
-async function updateAddress(userId, { fullName, phone, line1, line2, city, postcode }) {
+async function updateAddress(userId, { firstName, lastName, phone, line1, line2, city, postcode }) {
   return prisma.user.update({
     where: { id: userId },
     data: {
-      fullName,
+      firstName,
+      lastName,
+      // Courier labels still read the combined name
+      fullName: `${firstName} ${lastName}`.slice(0, 100),
       phone,
       addressLine1:    line1,
       addressLine2:    line2 || null,

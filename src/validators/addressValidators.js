@@ -16,5 +16,7 @@ const ukPhone = z.string().trim()
   .refine((v) => UK_PHONE_RE.test(v), { message: 'Enter a valid UK phone number' });
 
 const fullName = z.string().trim().min(2, 'Full name is required').max(100);
+const firstName = z.string().trim().min(1, 'First name is required').max(50);
+const lastName = z.string().trim().min(1, 'Last name is required').max(50);
 
-module.exports = { ukPostcode, ukPhone, fullName };
+module.exports = { ukPostcode, ukPhone, fullName, firstName, lastName };

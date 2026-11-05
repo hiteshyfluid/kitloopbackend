@@ -12,6 +12,8 @@ offersRouter.get('/:id',                  requireAuth, offersCtrl.getThreadDetai
 offersRouter.get('/:id/messages',         requireAuth, offersCtrl.getMessages);
 offersRouter.post('/:id/messages',        requireAuth, scanContent, offersCtrl.sendMessage);
 offersRouter.post('/:id/counter-offers',  requireAuth, scanContent, offersCtrl.sendCounterOffer);
+offersRouter.post('/:id/messages/:messageId/accept',  requireAuth, offersCtrl.acceptOffer);
+offersRouter.post('/:id/messages/:messageId/decline', requireAuth, offersCtrl.declineOffer);
 
 // ── /api/counter-offers ───────────────────────────────────────────────────────
 const counterOffersRouter = express.Router();

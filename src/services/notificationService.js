@@ -1,4 +1,6 @@
 const prisma = require('../lib/prisma');
+const emailTemplates = require('../templates/emailTemplates');
+const { sendEmail, getEmailLogoUrl, clientUrl } = require('./emailService');
 
 async function notify(userId, type, title, body, referenceId = null, referenceType = null) {
   try {
@@ -63,6 +65,49 @@ async function notifyDeliveryConfirmed(order) {
   ]);
 }
 
+// ─── notifyAdminsNewListing ──────────────────────────────────────────────────
+// Every new listing that goes live → a dashboard notification for each admin
+// plus an email. Listings don't need approval; this is for awareness only.
+// Extra recipients can be set with ADMIN_NOTIFICATION_EMAILS (comma separated).
+async function notifyAdminsNewListing(listingId) {
+  const [listing, admins] = await Promise.all([
+    prisma.listing.findUnique({
+      where: { id: listingId },
+      select: {
+        id: true, title: true, price: true, condition: true, photos: true,
+        seller: { select: { username: true, displayName: true } },
+        sport: { select: { name: true } },
+        subCategory: { select: { name: true } },
+        brand: { select: { name: true } },
+      },
+    }),
+    prisma.user.findMany({
+      where: { role: { in: ['admin', 'super_admin'] }, accountStatus: 'active', deletedAt: null },
+      select: { id: true, email: true },
+    }),
+  ]);
+  if (!listing) return;
+
+  const seller = listing.seller?.displayName || listing.seller?.username || 'A seller';
+  const body = `${seller} listed "${listing.title}" for £${Number(listing.price).toFixed(2)}.`;
+  await Promise.all(admins.map((a) => notify(a.id, 'listing_uploaded', 'New product uploaded', body, listing.id, 'listing')));
+
+  const extra = (process.env.ADMIN_NOTIFICATION_EMAILS || '').split(',').map((e) => e.trim()).filter(Boolean);
+  const recipients = [...new Set([...admins.map((a) => a.email), ...extra].map((e) => e.toLowerCase()))];
+  if (!recipients.length) return;
+
+  const message = emailTemplates.newListingAdminEmail({
+    listing,
+    adminUrl: `${clientUrl()}/admin/listings/${listing.id}`,
+    listingUrl: `${clientUrl()}/listing/${listing.id}`,
+    logoUrl: await getEmailLogoUrl(),
+  });
+  const results = await Promise.allSettled(recipients.map((to) => sendEmail({ to, ...message })));
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') console.error(`[notify] new listing email to ${recipients[i]} failed:`, r.reason?.message);
+  });
+}
+
 // ─── getNotifications ────────────────────────────────────────────────────────
 async function getNotifications(userId, { page = 1, pageSize = 20, unreadOnly = false } = {}) {
   const where = { userId, ...(unreadOnly ? { isRead: false } : {}) };
@@ -104,6 +149,7 @@ module.exports = {
   notifyOrderPlaced,
   notifyDispatched,
   notifyDeliveryConfirmed,
+  notifyAdminsNewListing,
   getNotifications,
   markRead,
   markAllRead,
