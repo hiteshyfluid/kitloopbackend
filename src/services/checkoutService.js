@@ -4,6 +4,7 @@ const stripe = require('../lib/stripe');
 const AppError = require('../utils/AppError');
 const { notifyOrderPlaced } = require('./notificationService');
 const { ensureStripeCustomer } = require('./paymentService');
+const { getDeliveryRates, deliveryOptionsFor } = require('./shippingService');
 
 // ─── Fee defaults (used if fee_config rows are absent) ───────────────────────
 // Percentages are stored as fractions (0.07 = 7 %).
@@ -30,6 +31,38 @@ async function getBuyerProtectionConfig() {
 
 function calcBuyerProtection(itemPrice, { percentage, flat }) {
   return Number((Number(itemPrice) * percentage + flat).toFixed(2));
+}
+
+const round2 = (n) => Number(Number(n).toFixed(2));
+
+// Sets a checkout line's (single session or cart item) delivery method and
+// re-prices it. The first option is the default.
+function chooseDelivery(line, method) {
+  const option = line.deliveryOptions.find((o) => o.method === method);
+  if (!option) {
+    throw new AppError(`That delivery option isn't available for “${line.listing.title}”`, 400, 'INVALID_DELIVERY_OPTION');
+  }
+  line.deliveryMethod = option.method;
+  line.shippingFee    = option.price;
+  line.totalAmount    = round2(line.itemPrice + line.shippingFee + line.buyerProtectionFee);
+}
+
+const sumLines = (items, key) => round2(items.reduce((t, i) => t + i[key], 0));
+
+function recalcCartTotals(session) {
+  for (const key of ['itemPrice', 'shippingFee', 'buyerProtectionFee', 'platformCommission', 'totalAmount', 'sellerNetAmount']) {
+    session[key] = sumLines(session.items, key);
+  }
+}
+
+const checkoutLines = (session) => (session.type === 'cart' ? session.items : [session]);
+
+// Order columns for the buyer's delivery choice
+function deliveryOrderFields(line) {
+  return {
+    deliveryMethod:  line.deliveryMethod ?? null,
+    shippingCourier: line.deliveryMethod && line.deliveryMethod !== 'seller' ? 'DPD' : null,
+  };
 }
 
 // Accepted offers / counter offers whose price lock is still open, keyed by
@@ -115,15 +148,15 @@ async function initiateCheckout(listingId, buyerId, counterOfferId = null) {
   }
 
   // Fetch fee configuration
-  const [buyerProtection, commissionPct] = await Promise.all([
+  const [buyerProtection, commissionPct, rates] = await Promise.all([
     getBuyerProtectionConfig(),
     getFeeValue('platform_commission_percentage'),
+    getDeliveryRates(),
   ]);
 
-  const shippingFee        = Number(listing.shippingFee);
+  const deliveryOptions    = deliveryOptionsFor(listing.parcelSize, rates, listing.shippingFee);
   const buyerProtectionFee = calcBuyerProtection(itemPrice, buyerProtection);
   const platformCommission = Number((itemPrice * commissionPct).toFixed(2));
-  const totalAmount        = Number((itemPrice + shippingFee + buyerProtectionFee).toFixed(2));
   const sellerNetAmount    = Number((itemPrice - platformCommission).toFixed(2));
 
   const session = {
@@ -142,10 +175,12 @@ async function initiateCheckout(listingId, buyerId, counterOfferId = null) {
       sellerDisplayName: listing.seller.displayName,
     },
     itemPrice,
-    shippingFee,
+    deliveryOptions,
+    deliveryMethod: null,
+    shippingFee: 0,
     buyerProtectionFee,
     platformCommission,
-    totalAmount,
+    totalAmount: 0,
     sellerNetAmount,
     deliveryAddress: null,
     paymentIntentId: null,
@@ -154,6 +189,7 @@ async function initiateCheckout(listingId, buyerId, counterOfferId = null) {
     createdAt: new Date(),
   };
 
+  chooseDelivery(session, deliveryOptions[0].method);
   _sessions.set(session.id, session);
   return session;
 }
@@ -179,19 +215,19 @@ async function initiateCartCheckout(buyerId) {
     throw new AppError('Your cart has no items available to buy', 409, 'CART_EMPTY');
   }
 
-  const [buyerProtection, commissionPct, agreedPrices] = await Promise.all([
+  const [buyerProtection, commissionPct, agreedPrices, rates] = await Promise.all([
     getBuyerProtectionConfig(),
     getFeeValue('platform_commission_percentage'),
     getAgreedPrices(buyerId, available.map((r) => r.listing.id)),
+    getDeliveryRates(),
   ]);
 
   const items = available.map(({ listing }) => {
     const agreed             = agreedPrices.get(listing.id);
     const itemPrice          = agreed ? Number(agreed.counterAmount) : Number(listing.price);
-    const shippingFee        = Number(listing.shippingFee);
     const buyerProtectionFee = calcBuyerProtection(itemPrice, buyerProtection);
     const platformCommission = Number((itemPrice * commissionPct).toFixed(2));
-    return {
+    const item = {
       listingId: listing.id,
       sellerId: listing.sellerId,
       counterOfferId: agreed?.id ?? null,
@@ -206,15 +242,18 @@ async function initiateCartCheckout(buyerId) {
         sellerUsername: listing.seller.username,
       },
       itemPrice,
-      shippingFee,
+      // Each item ships separately from its own seller, so each has its own choice
+      deliveryOptions: deliveryOptionsFor(listing.parcelSize, rates, listing.shippingFee),
+      deliveryMethod: null,
+      shippingFee: 0,
       buyerProtectionFee,
       platformCommission,
-      totalAmount: Number((itemPrice + shippingFee + buyerProtectionFee).toFixed(2)),
+      totalAmount: 0,
       sellerNetAmount: Number((itemPrice - platformCommission).toFixed(2)),
     };
+    chooseDelivery(item, item.deliveryOptions[0].method);
+    return item;
   });
-
-  const sum = (key) => Number(items.reduce((t, i) => t + i[key], 0).toFixed(2));
 
   const session = {
     id: randomUUID(),
@@ -222,12 +261,6 @@ async function initiateCartCheckout(buyerId) {
     buyerId,
     items,
     skippedCount: rows.length - available.length,
-    itemPrice: sum('itemPrice'),
-    shippingFee: sum('shippingFee'),
-    buyerProtectionFee: sum('buyerProtectionFee'),
-    platformCommission: sum('platformCommission'),
-    totalAmount: sum('totalAmount'),
-    sellerNetAmount: sum('sellerNetAmount'),
     deliveryAddress: null,
     paymentIntentId: null,
     paymentIntentClientSecret: null,
@@ -235,6 +268,7 @@ async function initiateCartCheckout(buyerId) {
     createdAt: new Date(),
   };
 
+  recalcCartTotals(session);
   _sessions.set(session.id, session);
   return session;
 }
@@ -263,6 +297,21 @@ async function submitAddress(sessionId, buyerId, addressData) {
   return session;
 }
 
+// ─── 3b. selectDelivery ───────────────────────────────────────────────────────
+// selections: [{ listing_id, method }] — ready for when more couriers are added.
+function selectDelivery(sessionId, buyerId, { selections = [] } = {}) {
+  const session = getCheckoutSession(sessionId, buyerId);
+  const lines = checkoutLines(session);
+
+  for (const { listing_id: listingId, method } of selections) {
+    const line = lines.find((l) => l.listingId === listingId);
+    if (!line) throw new AppError('That item is not in this checkout', 400, 'VALIDATION_ERROR');
+    chooseDelivery(line, method);
+  }
+  if (session.type === 'cart') recalcCartTotals(session);
+  return session;
+}
+
 // ─── 4. createPaymentIntent ───────────────────────────────────────────────────
 async function createPaymentIntent(sessionId, buyerId) {
   const session = getCheckoutSession(sessionId, buyerId);
@@ -270,6 +319,8 @@ async function createPaymentIntent(sessionId, buyerId) {
   if (!session.deliveryAddress) {
     throw new AppError('Submit your delivery address first', 400, 'ADDRESS_REQUIRED');
   }
+
+  const amountPence = Math.round(session.totalAmount * 100);
 
   // Ensure buyer has a Stripe customer that exists in the current Stripe account
   const buyer = await prisma.user.findUnique({ where: { id: buyerId } });
@@ -279,6 +330,10 @@ async function createPaymentIntent(sessionId, buyerId) {
   if (session.paymentIntentId) {
     const existing = await stripe.paymentIntents.retrieve(session.paymentIntentId);
     if (existing.status === 'requires_payment_method' || existing.status === 'requires_confirmation') {
+      // The buyer may have changed delivery option since — keep the amount in step
+      if (existing.amount !== amountPence) {
+        await stripe.paymentIntents.update(existing.id, { amount: amountPence });
+      }
       return { clientSecret: session.paymentIntentClientSecret, sessionId: session.id };
     }
   }
@@ -292,8 +347,6 @@ async function createPaymentIntent(sessionId, buyerId) {
       throw new AppError('An item in your cart was just sold — please review your cart and try again', 409, 'LISTING_NOT_AVAILABLE');
     }
   }
-
-  const amountPence = Math.round(session.totalAmount * 100);
 
   const metadata = session.type === 'cart'
     ? {
@@ -398,6 +451,7 @@ async function confirmOrder(sessionId, buyerId, paymentIntentId) {
           deliveryPostcode:     addr.postcode,
           deliveryName:         addr.name ?? null,
           deliveryPhone:        addr.phone ?? null,
+          ...deliveryOrderFields(session),
           agreedPrice:          session.counterOfferId ? session.itemPrice : null,
           snapshotListingTitle: session.listing.title,
           snapshotCondition:    session.listing.condition,
@@ -526,6 +580,7 @@ async function confirmCartOrder(session, buyerId, pi) {
             deliveryPostcode:     addr.postcode,
             deliveryName:         addr.name ?? null,
             deliveryPhone:        addr.phone ?? null,
+            ...deliveryOrderFields(item),
             agreedPrice:          item.counterOfferId ? item.itemPrice : null,
             snapshotListingTitle: item.listing.title,
             snapshotCondition:    item.listing.condition,
@@ -613,6 +668,7 @@ module.exports = {
   initiateCheckout,
   getCheckoutSession,
   submitAddress,
+  selectDelivery,
   createPaymentIntent,
   confirmOrder,
 };

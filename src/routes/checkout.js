@@ -8,6 +8,7 @@ router.post('/initiate',                          requireAuth, checkoutControlle
 router.post('/cart/initiate',                     requireAuth, checkoutController.initiateCartCheckout);
 router.get('/:session_id',                        requireAuth, checkoutController.getCheckoutSession);
 router.post('/:session_id/address',               requireAuth, checkoutController.submitAddress);
+router.put('/:session_id/delivery',               requireAuth, checkoutController.selectDelivery);
 router.post('/:session_id/payment-intent',        requireAuth, checkoutController.createPaymentIntent);
 router.post('/:session_id/confirm',               requireAuth, checkoutController.confirmOrder);
 

@@ -4,6 +4,7 @@ const { startAutoReleaseJob }          = require('./jobs/autoRelease');
 const { startCounterOfferExpiryJob }   = require('./jobs/counterOfferExpiry');
 const { startDisputeEscalationJob }    = require('./jobs/disputeEscalation');
 const { startAutoReinstateJob }        = require('./jobs/autoReinstate');
+const { startShippingDeadlineJobs }    = require('./jobs/shippingDeadlines');
 
 const PORT = process.env.PORT || 3000;
 
@@ -26,6 +27,7 @@ const server = app.listen(PORT, () => {
   startCounterOfferExpiryJob();
   startDisputeEscalationJob();
   startAutoReinstateJob();
+  startShippingDeadlineJobs();
 });
 
 server.on('error', (err) => {

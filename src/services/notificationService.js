@@ -12,7 +12,82 @@ async function notify(userId, type, title, body, referenceId = null, referenceTy
   }
 }
 
+// ─── Email ───────────────────────────────────────────────────────────────────
+// Emails go to active accounts only. `pref` is the user's opt-out column
+// (notification_messages / notification_order_updates); null means the email
+// is essential to the transaction (receipts, "please ship") and always sent.
+
+async function emailUser(userId, pref, build) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      email: true, displayName: true, username: true, accountStatus: true, deletedAt: true,
+      notificationMessages: true, notificationOrderUpdates: true,
+    },
+  });
+  if (!user?.email || user.deletedAt || user.accountStatus !== 'active') return;
+  if (pref && user[pref] === false) return;
+
+  const message = build({ name: user.displayName || user.username, logoUrl: await getEmailLogoUrl() });
+  await sendEmail({ to: user.email, ...message });
+}
+
+function safeEmail(label, userId, pref, build) {
+  return emailUser(userId, pref, build).catch((e) => console.error(`[email] ${label}:`, e.message));
+}
+
+const orderUrl   = (orderId) => `${clientUrl()}/orders/${orderId}`;
+const threadUrl  = (offerId) => `${clientUrl()}/messages?thread=${offerId}`;
+const listingUrl = (listingId) => `${clientUrl()}/listing/${listingId}`;
+
+async function getDispatchWindowDays() {
+  const row = await prisma.feeConfig.findUnique({ where: { configKey: 'dispatch_window_days' } }).catch(() => null);
+  return row ? Number(row.configValue) : 5;
+}
+
+// ─── Offers ──────────────────────────────────────────────────────────────────
+// `listing` is { id, title, price, photo }
+
+function emailOfferReceived(sellerId, { offerId, listing, amount }) {
+  return safeEmail('offer_received', sellerId, 'notificationMessages', (ctx) =>
+    emailTemplates.offerReceivedEmail({ ...ctx, listing, amount, url: threadUrl(offerId) }));
+}
+
+// kind: accepted | declined | counter
+function emailOfferResponse(buyerId, { kind, offerId, listing, amount, expiresAt }) {
+  const url = kind === 'accepted' ? listingUrl(listing.id) : threadUrl(offerId);
+  return safeEmail(`offer_${kind}`, buyerId, 'notificationMessages', (ctx) =>
+    emailTemplates.offerResponseEmail({ ...ctx, kind, listing, amount, expiresAt, url }));
+}
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+
+// The sale also appears in the buyer↔seller conversation, so the seller sees it
+// in Messages as well as Orders.
+async function postSaleMessage(order) {
+  const body = `Order placed. Please create the DPD label from My orders and drop the parcel at any DPD Pickup shop within ${await getDispatchWindowDays()} days.`;
+  const thread = await prisma.offer.upsert({
+    where:  { listingId_buyerId: { listingId: order.listingId, buyerId: order.buyerId } },
+    create: { listingId: order.listingId, buyerId: order.buyerId, sellerId: order.sellerId },
+    update: {},
+    select: { id: true },
+  });
+  const msg = await prisma.message.create({
+    data: { offerId: thread.id, senderId: order.buyerId, messageType: 'system', body },
+    select: { createdAt: true },
+  });
+  await prisma.offer.update({
+    where: { id: thread.id },
+    data: {
+      lastMessageAt: msg.createdAt,
+      lastMessagePreview: body.slice(0, 60),
+      sellerUnreadCount: { increment: 1 },
+    },
+  });
+}
+
 async function notifyOrderPlaced(order) {
+  const dispatchDays = await getDispatchWindowDays();
   await Promise.all([
     notify(
       order.buyerId,
@@ -26,22 +101,31 @@ async function notifyOrderPlaced(order) {
       order.sellerId,
       'order_placed',
       'New sale!',
-      `You've sold "${order.snapshotListingTitle}". Please dispatch within 3 days.`,
+      `You've sold "${order.snapshotListingTitle}". Create the DPD label within ${dispatchDays} days or the order is cancelled and refunded.`,
       order.id,
       'order'
     ),
+    postSaleMessage(order).catch((e) => console.error('[notify] sale message:', e.message)),
+    safeEmail('order_confirmation', order.buyerId, null, (ctx) =>
+      emailTemplates.orderConfirmationEmail({ ...ctx, order, url: orderUrl(order.id) })),
+    safeEmail('new_sale', order.sellerId, null, (ctx) =>
+      emailTemplates.newSaleEmail({ ...ctx, order, url: orderUrl(order.id), dispatchDays })),
   ]);
 }
 
 async function notifyDispatched(order) {
-  await notify(
-    order.buyerId,
-    'dispatched',
-    'Your order is on its way',
-    `"${order.snapshotListingTitle}" has been dispatched.${order.trackingNumber ? ` Tracking: ${order.trackingNumber}` : ''}`,
-    order.id,
-    'order'
-  );
+  await Promise.all([
+    notify(
+      order.buyerId,
+      'dispatched',
+      'Your order is on its way',
+      `"${order.snapshotListingTitle}" has been dispatched.${order.trackingNumber ? ` Tracking: ${order.trackingNumber}` : ''}`,
+      order.id,
+      'order'
+    ),
+    safeEmail('order_shipped', order.buyerId, 'notificationOrderUpdates', (ctx) =>
+      emailTemplates.orderShippedEmail({ ...ctx, order, url: orderUrl(order.id) })),
+  ]);
 }
 
 async function notifyDeliveryConfirmed(order) {
@@ -62,7 +146,66 @@ async function notifyDeliveryConfirmed(order) {
       order.id,
       'order'
     ),
+    emailOrderDelivered(order),
   ]);
+}
+
+// Delivered / completed email — also used by the auto-release job (and later
+// by courier tracking updates).
+function emailOrderDelivered(order) {
+  return safeEmail('order_delivered', order.buyerId, 'notificationOrderUpdates', (ctx) =>
+    emailTemplates.orderDeliveredEmail({ ...ctx, order, url: orderUrl(order.id) }));
+}
+
+// Courier marked the parcel delivered (tracking webhook)
+async function notifyArrived(order) {
+  await Promise.all([
+    notify(order.buyerId, 'delivered', 'Your order has arrived',
+      `"${order.snapshotListingTitle}" has been delivered. Check it and confirm, or raise an issue if it isn't as described.`,
+      order.id, 'order'),
+    safeEmail('order_arrived', order.buyerId, null, (ctx) =>
+      emailTemplates.orderArrivedEmail({ ...ctx, order, url: orderUrl(order.id) })),
+  ]);
+}
+
+// DPD left the parcel at a shop for the buyer to collect
+async function notifyAwaitingCollection(order) {
+  const where = order.collectionPointName ? ` at ${order.collectionPointName}` : '';
+  await Promise.all([
+    notify(order.buyerId, 'awaiting_collection', 'Your parcel is ready to collect',
+      `"${order.snapshotListingTitle}" is waiting for you${where}. Collect it before it's sent back.`,
+      order.id, 'order'),
+    safeEmail('awaiting_collection', order.buyerId, null, (ctx) =>
+      emailTemplates.awaitingCollectionEmail({ ...ctx, order, url: orderUrl(order.id), reminder: false })),
+  ]);
+}
+
+// "Less than 24 hours left to collect" (jobs/shippingDeadlines.js)
+function emailCollectionReminder(order) {
+  return emailUser(order.buyerId, null, (ctx) =>
+    emailTemplates.awaitingCollectionEmail({ ...ctx, order, url: orderUrl(order.id), reminder: true }));
+}
+
+// Seller missed the dispatch window — order cancelled and refunded
+async function notifyOrderCancelled(order) {
+  await Promise.all([
+    notify(order.buyerId, 'order_cancelled', 'Order cancelled and refunded',
+      `The seller didn't ship "${order.snapshotListingTitle}" in time, so we've refunded you in full.`,
+      order.id, 'order'),
+    notify(order.sellerId, 'order_cancelled', 'Order cancelled',
+      `"${order.snapshotListingTitle}" wasn't shipped in time. The order was cancelled, the buyer refunded and your item relisted.`,
+      order.id, 'order'),
+    safeEmail('order_cancelled_buyer', order.buyerId, null, (ctx) =>
+      emailTemplates.orderCancelledEmail({ ...ctx, order, role: 'buyer', url: orderUrl(order.id) })),
+    safeEmail('order_cancelled_seller', order.sellerId, null, (ctx) =>
+      emailTemplates.orderCancelledEmail({ ...ctx, order, role: 'seller', url: orderUrl(order.id) })),
+  ]);
+}
+
+// Daily "please ship" reminder (jobs/dispatchReminder.js)
+function emailDispatchReminder(order, { daysLeft, deadline }) {
+  return emailUser(order.sellerId, null, (ctx) =>
+    emailTemplates.dispatchReminderEmail({ ...ctx, order, daysLeft, deadline, url: orderUrl(order.id) }));
 }
 
 // ─── notifyAdminsNewListing ──────────────────────────────────────────────────
@@ -146,6 +289,15 @@ async function markAllRead(userId) {
 
 module.exports = {
   notify,
+  emailOfferReceived,
+  emailOfferResponse,
+  emailOrderDelivered,
+  emailDispatchReminder,
+  emailCollectionReminder,
+  notifyArrived,
+  notifyAwaitingCollection,
+  notifyOrderCancelled,
+  getDispatchWindowDays,
   notifyOrderPlaced,
   notifyDispatched,
   notifyDeliveryConfirmed,

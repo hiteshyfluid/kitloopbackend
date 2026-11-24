@@ -7,6 +7,7 @@ const { sendSuccess } = require('../utils/response');
 const settings = require('../services/integrationSettingsService');
 const prisma = require('../lib/prisma');
 const { getBuyerProtectionConfig } = require('../services/checkoutService');
+const { getPublicDeliveryRates } = require('../services/shippingService');
 const { testStripe, testMoov } = require('../services/integrationTestService');
 
 function validate(schema, data) {
@@ -69,11 +70,12 @@ const testConnection = catchAsync(async (req, res) => {
 const BRANDING_KEYS = ['site_logo_url', 'site_logo_footer_url'];
 
 const publicConfig = catchAsync(async (req, res) => {
-  const [stripe, moov, brandingRows, buyerProtection] = await Promise.all([
+  const [stripe, moov, brandingRows, buyerProtection, deliveryRates] = await Promise.all([
     settings.getActive('stripe'),
     settings.getActive('moov'),
     prisma.siteSetting.findMany({ where: { settingKey: { in: BRANDING_KEYS } } }),
     getBuyerProtectionConfig(),
+    getPublicDeliveryRates(),
   ]);
   const branding = Object.fromEntries(brandingRows.map((r) => [r.settingKey, r.settingValue]));
   res.set('Cache-Control', 'public, max-age=60');
@@ -81,7 +83,8 @@ const publicConfig = catchAsync(async (req, res) => {
     stripe: stripe?.config.publishable_key
       ? { publishableKey: stripe.config.publishable_key, mode: stripe.environment }
       : null,
-    shipping: { enabledCouriers: moov?.config.enabled_couriers ?? [] },
+    // Delivery prices per parcel size, for "Tracked delivery from £x"
+    shipping: { enabledCouriers: moov?.config.enabled_couriers ?? [], ...deliveryRates },
     // Same value checkout charges, so listing pages can show the buyer's real total
     fees: { buyerProtectionPct: buyerProtection.percentage, buyerProtectionFlat: buyerProtection.flat },
     // Logos set in Admin → Branding; null means "use the built-in wordmark"

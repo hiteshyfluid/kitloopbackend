@@ -46,6 +46,10 @@ app.use(cors({
   credentials: true,
 }));
 
+// Webhooks parse their own bodies (Stripe needs the raw bytes to verify its
+// signature), so they are mounted before the JSON parser.
+app.use(['/webhooks', '/api/webhooks'], webhooksRouter);
+
 // Blog posts and pages are sent as JSON, so allow more than the 100kb default
 app.use(express.json({ limit: '1mb' }));
 // Express 5 leaves req.body undefined when a request has no body (e.g. DELETE /admin/sports/:id).

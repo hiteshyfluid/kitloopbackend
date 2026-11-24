@@ -1,5 +1,9 @@
+const crypto = require('crypto');
 const express = require('express');
 const stripe = require('../lib/stripe');
+const integrationSettings = require('../services/integrationSettingsService');
+const { normaliseTrackingUpdate } = require('../services/shippingService');
+const { applyTrackingUpdate } = require('../services/orderService');
 const prisma = require('../lib/prisma');
 const checkoutService = require('../services/checkoutService');
 const { notify } = require('../services/notificationService');
@@ -42,6 +46,39 @@ router.post(
     );
   }
 );
+
+// ─── POST /webhooks/moov/:token ───────────────────────────────────────────────
+// DPD tracking updates from Moov. Moov is given this URL with the secret token
+// from Admin → Shipping settings (webhook secret). Accepts one update or an
+// array of them; unknown parcels are acknowledged and ignored.
+function tokenMatches(given, expected) {
+  if (!given || !expected) return false;
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(String(expected));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+router.post('/moov/:token', express.json({ limit: '1mb' }), async (req, res) => {
+  const moov = await integrationSettings.getActive('moov').catch(() => null);
+  if (!tokenMatches(req.params.token, moov?.secrets?.webhook_secret)) {
+    return res.status(401).json({ error: 'Invalid webhook token' });
+  }
+
+  res.status(200).json({ received: true });
+
+  const updates = Array.isArray(req.body) ? req.body : [req.body];
+  for (const body of updates) {
+    try {
+      const update = normaliseTrackingUpdate(body);
+      const result = await applyTrackingUpdate(update);
+      if (!result.matched) {
+        console.warn('[webhook:moov] no order for update', { reference: update.reference, tracking: update.trackingNumber, status: update.text });
+      }
+    } catch (err) {
+      console.error('[webhook:moov] failed to apply update:', err.message);
+    }
+  }
+});
 
 // ─── Event dispatcher ─────────────────────────────────────────────────────────
 async function handleEvent(event) {

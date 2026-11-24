@@ -29,6 +29,13 @@ const addressSchema = z.object({
   phone:     z.string({ error: 'Phone number is required' }).trim().min(1, 'Phone number is required').pipe(ukPhone),
 });
 
+const deliverySchema = z.object({
+  selections: z.array(z.object({
+    listing_id: z.string().uuid('Invalid listing ID'),
+    method:     z.enum(['home', 'seller']),
+  })).max(50).optional().default([]),
+});
+
 const confirmSchema = z.object({
   payment_intent_id: z.string().min(1, 'payment_intent_id is required'),
 });
@@ -67,6 +74,13 @@ const submitAddress = catchAsync(async (req, res) => {
   sendSuccess(res, 200, { session });
 });
 
+// PUT /api/checkout/:session_id/delivery — delivery option per item
+const selectDelivery = catchAsync(async (req, res) => {
+  const { selections } = validate(deliverySchema, req.body);
+  const session = checkoutService.selectDelivery(req.params.session_id, req.user.id, { selections });
+  sendSuccess(res, 200, { session });
+});
+
 // POST /api/checkout/:session_id/payment-intent
 const createPaymentIntent = catchAsync(async (req, res) => {
   const result = await checkoutService.createPaymentIntent(
@@ -94,6 +108,7 @@ module.exports = {
   initiateCheckout,
   getCheckoutSession,
   submitAddress,
+  selectDelivery,
   createPaymentIntent,
   confirmOrder,
 };

@@ -11,6 +11,7 @@ const CART_LISTING_SELECT = {
   title: true,
   price: true,
   shippingFee: true,
+  parcelSize: true,
   condition: true,
   colour: true,
   photos: true,

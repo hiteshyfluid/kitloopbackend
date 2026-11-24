@@ -3347,3 +3347,66 @@ Group 8 is where every database-level safety net you built back in the migration
 | 7\. Notifications | 3 |
 | 8\. Admin | 26 |
 
+
+---
+
+## **18. Delivery, shipping labels & tracking (DPD via Moov)**
+
+DPD **shop to home**: the seller creates the label, then drops the parcel at any DPD Pickup shop by `drop_off_by` (order date + `dispatch_window_days`), showing the QR code (service `DPD-12DROPQR`) or the printed label (`DPD12-DROP`). DPD delivers to the buyer's door. The seller's saved address is the sender. DPD limits: 60 × 60 × 60 cm, 20 kg; larger items use seller-arranged tracked delivery (no label).
+
+`GET /api/orders/:id/label/qr` (seller only) returns the drop-off QR image when DPD supplied one; `drop_off_qr_mime` on the order is set when it exists, and `drop_off_code` holds a raw drop-off code if returned.
+
+Admin → Fees: `shipping_fee_<small|medium|large>` (DPD home delivery), `shipping_fee_oversized` (seller-arranged), `dispatch_window_days` (default 5: daily seller reminders, then automatic cancellation and full refund).
+
+`GET /api/config/public` → `shipping: { courier, labelled_sizes, rates: { home: {size: price} } }` — used for "Tracked delivery from £x".
+
+### Checkout
+
+Each checkout line (the session, or each cart item) has `delivery_options: [{ method: home|seller, courier, label, price }]` and `delivery_method`. `shipping_fee` / `total_amount` follow it.
+
+| Method | Path | Body | Notes |
+| --- | --- | --- | --- |
+| PUT | `/api/checkout/:session_id/delivery` | `{ selections: [{ listing_id, method }] }` | Returns the re-priced `session` (ready for when more couriers are offered). |
+
+`POST /:session_id/payment-intent` updates an existing PaymentIntent's amount if the delivery choice changed.
+
+### Labels (seller)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/api/orders/:id/label` | Buys the DPD label (base64 image) with collection the next working day. Errors: `SELLER_ADDRESS_REQUIRED`, `LABEL_EXISTS`, `LABEL_NOT_AVAILABLE` (oversized), `MOOV_NOT_CONFIGURED` (DPD service code missing). Returns the updated `order`. |
+| GET | `/api/orders/:id/label` | The label file, seller only, `Cache-Control: private, no-store`. Never at a public URL — it contains the buyer's address. |
+
+Parcel dimensions/weight come from the listing's variant options (`shipping_box_cm`, `est_weight`), falling back to a placeholder box per parcel size.
+
+### Tracking webhook (Moov → us)
+
+**`POST /api/webhooks/moov/:token`** — `:token` is the webhook secret from Admin → Shipping settings. Accepts one update or an array. Matched by our label `reference` (`KL…`) or the tracking number. Status text is classified as `in_transit`, `out_for_delivery`, `awaiting_collection`, `delivered` or `exception`:
+
+- First scan while awaiting dispatch → order **dispatched** (buyer emailed).
+- `awaiting_collection` → buyer emailed with the shop and collect-by date (from the payload, else +7 days); a reminder is emailed when less than 24 hours remain.
+- `delivered` → order **delivered**, buyer emailed; the issue window (`dispute_window_days`) starts from delivery.
+
+Orders gain `delivery_method`, `drop_off_by`, `drop_off_qr_mime`, `drop_off_code`, `tracking_status`, `tracking_status_text`, `tracking_status_at`, `collection_point_name`, `collection_point_address`, `collect_by`, `cancelled_at`, `cancel_reason`.
+
+The Stripe webhook (`POST /webhooks/stripe`, also `/api/webhooks/stripe`) is now mounted — it was previously defined but not reachable.
+
+### Automatic cancellation
+
+Hourly: orders still awaiting dispatch after `dispatch_window_days` are cancelled, the buyer refunded in full through Stripe (idempotent per order), any unused label voided and the item relisted. Both parties are notified and emailed.
+
+### Emails
+
+| Trigger | To | Respects setting |
+| --- | --- | --- |
+| Offer received | Seller | Messages & offers |
+| Offer accepted / declined, counter offer | Buyer | Messages & offers |
+| Order placed (confirmation / "you sold — create the label within N days") | Buyer / Seller | Always sent |
+| Daily "please ship" reminder (09:00 UK) | Seller | Always sent |
+| Order cancelled & refunded (not shipped in time) | Buyer and seller | Always sent |
+| Order dispatched | Buyer | Order updates |
+| Delivered (DPD tracking) | Buyer | Always sent |
+| Waiting at a DPD shop + 24-hour reminder | Buyer | Always sent |
+| Order completed (confirmed or auto-release) | Buyer | Order updates |
+
+A sale also posts a system message in the buyer↔seller conversation.

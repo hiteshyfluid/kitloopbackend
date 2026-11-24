@@ -1,6 +1,10 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
-const { notifyDispatched, notifyDeliveryConfirmed } = require('./notificationService');
+const stripe = require('../lib/stripe');
+const {
+  notifyDispatched, notifyDeliveryConfirmed, notifyOrderCancelled, notifyArrived, notifyAwaitingCollection,
+} = require('./notificationService');
+const { cancelLabel, COLLECTION_HOLD_DAYS } = require('./shippingService');
 
 // ─── Shared select ────────────────────────────────────────────────────────────
 const ORDER_SELECT = {
@@ -32,7 +36,20 @@ const ORDER_SELECT = {
   shippingReference: true,
   labelUrl: true,
   labelCreatedAt: true,
+  labelFormat: true,
   trackingUrl: true,
+  deliveryMethod: true,
+  dropOffBy: true,
+  dropOffQrMime: true,
+  dropOffCode: true,
+  trackingStatus: true,
+  trackingStatusText: true,
+  trackingStatusAt: true,
+  collectionPointName: true,
+  collectionPointAddress: true,
+  collectBy: true,
+  cancelledAt: true,
+  cancelReason: true,
   agreedPrice: true,
   snapshotListingTitle: true,
   snapshotCondition: true,
@@ -141,7 +158,8 @@ async function dispatchOrder(orderId, sellerId, trackingNumber) {
     where: { id: orderId },
     data: {
       fulfilmentStatus:       'dispatched',
-      trackingNumber:         trackingNumber || null,
+      // Keep the label's tracking number if the seller leaves the field blank
+      trackingNumber:         trackingNumber || order.trackingNumber || null,
       dispatchedAt:           now,
       disputeWindowExpiresAt: new Date(now.getTime() + disputeWindowDays * 24 * 60 * 60 * 1000),
     },
@@ -230,6 +248,146 @@ async function releaseEscrow(orderId) {
   return updatedOrder;
 }
 
+// ─── cancelUnshippedOrder ─────────────────────────────────────────────────────
+// The seller missed the dispatch deadline: cancel, refund the buyer in full,
+// void any unused label and put the item back on sale. Called by the
+// dispatchDeadline job. The order is claimed first so a seller marking it as
+// dispatched at the same moment can't race the refund.
+async function cancelUnshippedOrder(orderId, reason) {
+  const now = new Date();
+  const claimed = await prisma.order.updateMany({
+    where: { id: orderId, fulfilmentStatus: 'awaiting_dispatch', paymentStatus: 'held', disputeStatus: 'none' },
+    data:  { fulfilmentStatus: 'cancelled', cancelledAt: now, cancelReason: reason },
+  });
+  if (!claimed.count) return null;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { payment: true, listing: { select: { id: true, status: true } }, seller: { select: { accountStatus: true } } },
+  });
+
+  let refund;
+  try {
+    refund = await stripe.refunds.create(
+      {
+        payment_intent: order.payment.stripePaymentIntentId,
+        amount: Math.round(Number(order.payment.amountTotal) * 100),
+        reason: 'requested_by_customer',
+        metadata: { order_id: order.id, cause: 'not_dispatched' },
+      },
+      // One refund per order, however many times this runs
+      { idempotencyKey: `kitloop-cancel-${order.id}` },
+    );
+  } catch (err) {
+    // Put the order back so it can be retried (or handled by an admin)
+    await prisma.order.update({
+      where: { id: orderId },
+      data:  { fulfilmentStatus: 'awaiting_dispatch', cancelledAt: null, cancelReason: null },
+    });
+    throw err;
+  }
+
+  const relist = order.listing.status === 'sold' && order.seller.accountStatus === 'active';
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.payment.update({
+      where: { orderId },
+      data: {
+        escrowStatus: 'refunded',
+        paymentStatus: 'refunded',
+        stripeRefundId: refund.id,
+        amountRefunded: order.payment.amountTotal,
+        refundReason: reason,
+        shippingFeeRefunded: true,
+      },
+    });
+    if (relist) {
+      await tx.listing.update({ where: { id: order.listingId }, data: { status: 'live', soldAt: null } });
+    }
+    return tx.order.update({
+      where: { id: orderId },
+      data:  { paymentStatus: 'refunded' },
+      select: ORDER_SELECT,
+    });
+  });
+
+  cancelLabel(order);
+  notifyOrderCancelled(updated).catch((e) => console.error('[notify] order_cancelled:', e.message));
+  return updated;
+}
+
+// ─── applyTrackingUpdate ──────────────────────────────────────────────────────
+// One courier tracking event (normalised by shippingService). Matches the order
+// by our label reference, else the tracking number, records the event and
+// moves the order on: collected → dispatched, at a shop → awaiting collection,
+// delivered → delivered (the buyer's issue window starts now).
+async function applyTrackingUpdate(update) {
+  const match = [
+    update.reference && { shippingReference: String(update.reference) },
+    update.trackingNumber && { trackingNumber: String(update.trackingNumber) },
+  ].filter(Boolean);
+  if (!match.length) return { matched: false };
+
+  const order = await prisma.order.findFirst({ where: { OR: match }, orderBy: { createdAt: 'desc' } });
+  if (!order) return { matched: false };
+
+  const events = Array.isArray(order.trackingEvents) ? order.trackingEvents : [];
+  const event = { status: update.status, text: update.text, at: update.at.toISOString() };
+  if (events.some((e) => e.text === event.text && e.at === event.at)) {
+    return { matched: true, orderId: order.id, duplicate: true };
+  }
+
+  const data = {
+    trackingEvents: [event, ...events].slice(0, 30),
+    ...(update.status ? { trackingStatus: update.status } : {}),
+    trackingStatusText: update.text,
+    trackingStatusAt: update.at,
+  };
+
+  const open = !['completed', 'cancelled'].includes(order.fulfilmentStatus);
+  const now = new Date();
+  const after = [];
+
+  if (open && order.fulfilmentStatus === 'awaiting_dispatch'
+    && ['in_transit', 'out_for_delivery', 'awaiting_collection', 'delivered'].includes(update.status)) {
+    const disputeWindowDays = await getDisputeWindowDays();
+    Object.assign(data, {
+      fulfilmentStatus: 'dispatched',
+      dispatchedAt: update.at,
+      disputeWindowExpiresAt: new Date(now.getTime() + disputeWindowDays * 86_400_000),
+    });
+    after.push('dispatched');
+  }
+
+  if (open && update.status === 'awaiting_collection' && order.trackingStatus !== 'awaiting_collection') {
+    Object.assign(data, {
+      collectionPointName: update.collectionPoint?.name ?? order.collectionPointName,
+      collectionPointAddress: update.collectionPoint?.address ?? order.collectionPointAddress,
+      collectBy: update.collectBy ?? new Date(update.at.getTime() + COLLECTION_HOLD_DAYS * 86_400_000),
+      collectionReminderSentAt: null,
+    });
+    after.push('awaiting_collection');
+  }
+
+  if (open && update.status === 'delivered' && ['awaiting_dispatch', 'dispatched'].includes(order.fulfilmentStatus)) {
+    // The buyer's issue window runs from delivery
+    const disputeWindowDays = await getDisputeWindowDays();
+    Object.assign(data, {
+      fulfilmentStatus: 'delivered',
+      deliveredAt: update.at,
+      disputeWindowExpiresAt: new Date(now.getTime() + disputeWindowDays * 86_400_000),
+    });
+    after.push('delivered');
+  }
+
+  const updated = await prisma.order.update({ where: { id: order.id }, data, select: ORDER_SELECT });
+
+  if (after.includes('dispatched')) notifyDispatched(updated).catch((e) => console.error('[notify] dispatched:', e.message));
+  if (after.includes('awaiting_collection')) notifyAwaitingCollection(updated).catch((e) => console.error('[notify] awaiting_collection:', e.message));
+  if (after.includes('delivered')) notifyArrived(updated).catch((e) => console.error('[notify] delivered:', e.message));
+
+  return { matched: true, orderId: order.id, status: update.status };
+}
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 async function getDisputeWindowDays() {
   try {
@@ -247,4 +405,6 @@ module.exports = {
   dispatchOrder,
   confirmDelivery,
   releaseEscrow,
+  cancelUnshippedOrder,
+  applyTrackingUpdate,
 };

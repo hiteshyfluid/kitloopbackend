@@ -206,6 +206,8 @@ enum NotificationType {
   listing_uploaded
   offer_accepted
   offer_declined
+  order_cancelled
+  awaiting_collection
 }
 
 enum AdminActionType {
@@ -616,7 +618,31 @@ model Order {
   labelUrl                 String?             @map("label_url")
   labelCreatedAt           DateTime?           @map("label_created_at")
   trackingUrl              String?             @map("tracking_url")
-  agreedPrice             Decimal?            @map("agreed_price") @db.Decimal(10, 2)
+  // Buyer's delivery choice at checkout: home (DPD) | seller (oversized, seller-arranged)
+  deliveryMethod           String?             @map("delivery_method") @db.VarChar(20)
+  // Seller's label (base64 file, served only to the seller) and DPD collection day
+  labelFormat              String?             @map("label_format") @db.VarChar(10)
+  labelData                String?             @map("label_data")
+  labelMime                String?             @map("label_mime") @db.VarChar(40)
+  dropOffBy                DateTime?           @map("drop_off_by")
+  dropOffQr                String?             @map("drop_off_qr")
+  dropOffQrMime            String?             @map("drop_off_qr_mime") @db.VarChar(40)
+  dropOffCode              String?             @map("drop_off_code") @db.VarChar(100)
+  // Courier tracking updates (Moov webhook)
+  trackingStatus           String?             @map("tracking_status") @db.VarChar(40)
+  trackingStatusText       String?             @map("tracking_status_text") @db.VarChar(255)
+  trackingStatusAt         DateTime?           @map("tracking_status_at")
+  trackingEvents           Json?               @map("tracking_events")
+  // Set when DPD leaves the parcel at a shop for the buyer to collect
+  collectionPointName      String?             @map("collection_point_name") @db.VarChar(150)
+  collectionPointAddress   String?             @map("collection_point_address")
+  collectBy                DateTime?           @map("collect_by")
+  collectionReminderSentAt DateTime?           @map("collection_reminder_sent_at")
+  dispatchReminderCount    Int                 @default(0) @map("dispatch_reminder_count")
+  lastDispatchReminderAt   DateTime?           @map("last_dispatch_reminder_at")
+  cancelledAt              DateTime?           @map("cancelled_at")
+  cancelReason             String?             @map("cancel_reason") @db.VarChar(255)
+  agreedPrice            Decimal?            @map("agreed_price") @db.Decimal(10, 2)
   snapshotListingTitle     String              @map("snapshot_listing_title") @db.VarChar(80)
   snapshotCondition        String              @map("snapshot_condition") @db.VarChar(20)
   snapshotPhotos           Json                @map("snapshot_photos")

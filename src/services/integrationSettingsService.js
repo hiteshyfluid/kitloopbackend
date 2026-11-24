@@ -53,6 +53,8 @@ const PROVIDERS = {
       auth_company:         'Kitloop',
       courier_auth_company: 'C2C',
       enabled_couriers:     ['DPD', 'YodelC2C'],
+      // Moov dc_service_id for DPD home delivery — provided by Moov for the Kitloop account
+      dpd_home_service_id:   '',
     },
     configSchema: {
       billing_base_url:     httpsUrl,
@@ -63,8 +65,10 @@ const PROVIDERS = {
       auth_company:         z.string().trim().min(1).max(100),
       courier_auth_company: z.string().trim().min(1).max(100),
       enabled_couriers:     z.array(z.enum(SUPPORTED_COURIERS)).max(SUPPORTED_COURIERS.length),
+      dpd_home_service_id:   z.string().trim().max(60),
     },
-    secretFields: ['customer_key', 'api_token'],
+    // webhook_secret: the token in the tracking-update URL given to Moov
+    secretFields: ['customer_key', 'api_token', 'webhook_secret'],
     requiredToActivate: ['api_token'],
     requiredConfigToActivate: ['api_user'],
   },

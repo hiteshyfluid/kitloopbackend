@@ -14,6 +14,9 @@ router.get('/sales',                   requireAuth, orderController.getMySales);
 router.get('/:id',                     requireAuth, orderController.getOrder);
 router.post('/:id/dispatch',           requireAuth, orderController.dispatchOrder);
 router.post('/:id/confirm-delivery',   requireAuth, orderController.confirmDelivery);
+router.post('/:id/label',              requireAuth, orderController.createLabel);
+router.get('/:id/label',               requireAuth, orderController.getLabel);
+router.get('/:id/label/qr',            requireAuth, orderController.getLabel);
 router.post('/:id/dispute',            requireAuth, disputeController.raiseDispute);
 router.post('/:id/review',             requireAuth, reviewController.submitReview);
 

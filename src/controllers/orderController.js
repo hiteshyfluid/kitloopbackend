@@ -3,6 +3,7 @@ const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const { sendSuccess } = require('../utils/response');
 const orderService = require('../services/orderService');
+const shippingService = require('../services/shippingService');
 
 function validate(schema, data) {
   const result = schema.safeParse(data);
@@ -54,10 +55,35 @@ const confirmDelivery = catchAsync(async (req, res) => {
   sendSuccess(res, 200, { order });
 });
 
+// ─── Shipping labels (seller) ────────────────────────────────────────────────
+
+const orderIdSchema = z.object({ id: z.string().uuid('Order not found') });
+
+// POST /api/orders/:id/label — buy the DPD label through Moov. The seller drops
+// the parcel at a DPD Pickup shop (QR code or printed label)
+const createLabel = catchAsync(async (req, res) => {
+  const { id } = validate(orderIdSchema, req.params);
+  await shippingService.createLabel(id, req.user.id);
+  const order = await orderService.getOrder(id, req.user.id);
+  sendSuccess(res, 201, { order });
+});
+
+// GET /api/orders/:id/label — the label file (contains the buyer's address)
+// GET /api/orders/:id/label/qr — the drop-off QR code, when DPD returned one
+const getLabel = catchAsync(async (req, res) => {
+  const { id } = validate(orderIdSchema, req.params);
+  const kind = req.path.endsWith('/qr') ? 'qr' : 'label';
+  const { buffer, mime } = await shippingService.getLabel(id, req.user.id, kind);
+  res.set({ 'Content-Type': mime, 'Cache-Control': 'private, no-store' });
+  res.send(buffer);
+});
+
 module.exports = {
   getMyPurchases,
   getMySales,
   getOrder,
   dispatchOrder,
   confirmDelivery,
+  createLabel,
+  getLabel,
 };

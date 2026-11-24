@@ -1,6 +1,6 @@
 const prisma       = require('../lib/prisma');
 const AppError     = require('../utils/AppError');
-const { notify }   = require('./notificationService');
+const { notify, emailOfferReceived, emailOfferResponse } = require('./notificationService');
 const { initiateCheckout } = require('./checkoutService');
 
 const MSG_PAGE_SIZE       = 30;
@@ -67,6 +67,9 @@ function makePreview(messageType, body, amount) {
   if (messageType === 'counter_offer') return `Counter offer: £${Number(amount).toFixed(2)}`;
   return (body ?? '').slice(0, 60);
 }
+
+// Listing summary for offer emails
+const emailListing = (l) => ({ id: l.id, title: l.title, price: l.price, photo: (l.photos ?? [])[0] ?? null });
 
 // ─── 1. getOrCreateThread ─────────────────────────────────────────────────────
 
@@ -241,7 +244,7 @@ async function sendMessage(offerId, senderId, body, offerAmount) {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     include: {
-      listing: { select: { id: true, status: true, title: true, price: true } },
+      listing: { select: { id: true, status: true, title: true, price: true, photos: true } },
       seller:  { select: { id: true, accountStatus: true } },
       buyer:   { select: { id: true, accountStatus: true } },
     },
@@ -325,6 +328,7 @@ async function sendMessage(offerId, senderId, body, offerAmount) {
       offerId,
       'offer'
     ).catch((e) => console.error('[notify] offer_received:', e.message));
+    emailOfferReceived(offer.sellerId, { offerId, listing: emailListing(offer.listing), amount: offerAmount });
   }
 
   return message;
@@ -336,7 +340,7 @@ async function sendCounterOffer(offerId, sellerId, counterAmount, message) {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     include: {
-      listing: { select: { id: true, title: true, price: true, status: true } },
+      listing: { select: { id: true, title: true, price: true, status: true, photos: true } },
     },
   });
 
@@ -426,9 +430,12 @@ async function sendCounterOffer(offerId, sellerId, counterAmount, message) {
     'counter_offer_received',
     'Counter offer received',
     `The seller has made a counter offer of £${Number(counterAmount).toFixed(2)} on "${offer.listing.title}"`,
-    counterOffer.id,
-    'counter_offer'
+    offerId,
+    'offer'
   ).catch((e) => console.error('[notify] counter_offer_received:', e.message));
+  emailOfferResponse(offer.buyerId, {
+    kind: 'counter', offerId, listing: emailListing(offer.listing), amount: counterAmount, expiresAt,
+  });
 
   return counterOffer;
 }
@@ -486,8 +493,8 @@ async function acceptCounterOffer(counterOfferId, buyerId) {
     'counter_offer_accepted',
     'Counter offer accepted!',
     `${co.seller.displayName ?? 'A buyer'} accepted your counter offer of £${Number(co.counterAmount).toFixed(2)} on "${co.listing.title}". They are now completing checkout.`,
-    counterOfferId,
-    'counter_offer'
+    co.offerId,
+    'offer'
   ).catch((e) => console.error('[notify] counter_offer_accepted:', e.message));
 
   return {
@@ -523,8 +530,8 @@ async function declineCounterOffer(counterOfferId, buyerId) {
     'counter_offer_declined',
     'Counter offer declined',
     `Your counter offer of £${Number(co.counterAmount).toFixed(2)} on "${co.listing.title}" was declined.`,
-    counterOfferId,
-    'counter_offer'
+    co.offerId,
+    'offer'
   ).catch((e) => console.error('[notify] counter_offer_declined:', e.message));
 
   return updated;
@@ -541,7 +548,7 @@ async function loadOfferMessageForSeller(offerId, messageId, sellerId) {
     include: {
       offer: {
         include: {
-          listing: { select: { id: true, title: true, price: true, status: true } },
+          listing: { select: { id: true, title: true, price: true, status: true, photos: true } },
           buyer:   { select: { id: true, accountStatus: true } },
         },
       },
@@ -636,6 +643,9 @@ async function acceptOffer(offerId, messageId, sellerId) {
     offer.listingId,
     'listing'
   ).catch((e) => console.error('[notify] offer_accepted:', e.message));
+  emailOfferResponse(offer.buyerId, {
+    kind: 'accepted', offerId, listing: emailListing(offer.listing), amount, expiresAt: lockExpiresAt,
+  });
 
   return {
     offerStatus: 'accepted',
@@ -664,6 +674,7 @@ async function declineOffer(offerId, messageId, sellerId) {
     offerId,
     'offer'
   ).catch((e) => console.error('[notify] offer_declined:', e.message));
+  emailOfferResponse(offer.buyerId, { kind: 'declined', offerId, listing: emailListing(offer.listing), amount });
 
   return { offerStatus: 'declined' };
 }

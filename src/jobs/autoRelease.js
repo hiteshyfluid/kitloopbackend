@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const prisma = require('../lib/prisma');
 const { releaseEscrow } = require('../services/orderService');
-const { notify } = require('../services/notificationService');
+const { notify, emailOrderDelivered } = require('../services/notificationService');
 
 // Runs every day at midnight UTC.
 // Finds orders where the buyer's dispute window has expired with no active
@@ -40,7 +40,7 @@ async function runAutoRelease() {
 
   for (const order of expiredOrders) {
     try {
-      await releaseEscrow(order.id);
+      const completed = await releaseEscrow(order.id);
 
       // Notify both parties
       await Promise.all([
@@ -60,6 +60,7 @@ async function runAutoRelease() {
           order.id,
           'order'
         ),
+        emailOrderDelivered(completed),
       ]);
 
       console.log(`[autoRelease] Released: order ${order.id}`);
